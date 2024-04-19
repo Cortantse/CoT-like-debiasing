@@ -4,9 +4,10 @@
 
 ## 文件夹
 
-- `failure_data`：用来记录不同方法在BBQ测试下错误的情况。
-- `outputs_jsonl`：存放由`main.py`并发生成的原始数据。
+- `Failure_data`：用来记录不同方法在BBQ测试下错误的情况。
 - `raw_data`：用于记录不同方法在BBQ测试下的所有结果。
+- `anaylsis`：放分析图片和报告
+- `BBQ_original_data_and_code`：放BBQ原始问题，以及调用api的方法，以及部分模板，模板之后会单独整理出来，以及代码部分目前的并发api、异步api做得不好，还有点bug QaQ
 
 ## 代码文件
 
