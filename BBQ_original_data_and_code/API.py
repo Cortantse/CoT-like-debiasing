@@ -21,14 +21,14 @@ import json
 import openai
 from openai import OpenAI
 import httpx
-# from main import MODEL
-# from main import URL
-# from main import API_KEY
-API_KEY = 'sk-2RILZ8CZBM72wPP068F97bCeEaBe4531BaE18051F690F536'
-
-MODEL = 'gpt-3.5-turbo'
-
-URL = 'https://hk.xty.app/v1'
+from main import MODEL
+from main import URL
+from main import API_KEY
+# API_KEY = 'sk-2RILZ8CZBM72wPP068F97bCeEaBe4531BaE18051F690F536'
+#
+# MODEL = 'gpt-3.5-turbo'
+#
+# URL = 'https://hk.xty.app/v1'
 
 
 # Prompts
@@ -91,7 +91,7 @@ def build_request_messages(json_obj, type):
 
 
 # 不需要保证有ABC答案
-def send_request_for_rationale(messages)->str:
+def send_request_for_rationale(messages, need_print=False)->str:
     client = OpenAI(
         base_url=URL,
         api_key=API_KEY,
@@ -102,8 +102,11 @@ def send_request_for_rationale(messages)->str:
     )
     completion = client.chat.completions.create(
         model=MODEL,
-        messages=messages
+        messages=messages,
     )
+    if need_print:
+        print(completion.choices[0].message.content)
+        print("The length of the rationale is: ", str(len(completion.choices[0].message.content)))
     return completion.choices[0].message.content
 
 # 保证LLM能获得答案，除了恶性情况
