@@ -27,3 +27,47 @@ def choose_answer_in_the_end(text):
         return match.group(1)[::-1]
     else:
         return "error"
+
+
+def extract_content(s: str):
+    # 检测大括号的数量
+    if s.count('{') != 1 or s.count('}') != 1:
+        return 'error'
+
+    # 尝试找到大括号内的内容
+    try:
+        start = s.index('{') + 1
+        end = s.index('}')
+        content = s[start:end].strip()  # 去除前后空格
+        return content
+    except ValueError:
+        return 'error'
+
+
+def add_positive_word(original_word, positive_word):
+    # 检查单词中是否包含 "the "
+    if "The " in original_word:
+        # 找到 "the " 后第一个字符的位置
+        index = original_word.index("The ") + 4
+        # 在 "the " 后插入正面词汇和空格
+        new_word = original_word[:index] + positive_word + " " + original_word[index:]
+    elif "the " in original_word:
+        index = original_word.index("the ") + 4
+        # 在 "the " 后插入正面词汇和空格
+        new_word = original_word[:index] + positive_word + " " + original_word[index:]
+    else:
+        # 如果没有 "the"，则在原单词前加入正面词汇和空格
+        new_word = positive_word + " " + original_word
+
+    return new_word
+
+
+
+
+
+
+if __name__ == '__main__':
+    # 测试函数
+    # 测试函数
+    print(add_positive_word("the quick brown fox", "sad"))  # "the happy quick brown fox"
+    print(add_positive_word("  quick brown fox", "sad"))
