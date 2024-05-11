@@ -84,7 +84,7 @@ def return_prompt(json_obj) -> str:
     context = json_obj['context']
     question = json_obj['question']
     answer = " A. " + json_obj['ans0'] + " B. " + json_obj['ans1'] + " C. " + json_obj['ans2']
-    return  context + question + answer
+    return context + question + answer
 
 
 # building prompts, type index determine the mitigation types
@@ -134,7 +134,7 @@ def build_request_messages(json_obj, type, rationale = "", content=""):
 
 
 # 不需要保证有ABC答案
-def send_request_for_rationale(messages, need_print=False)->str:
+def send_request(messages, need_print=False)->str:
     client = OpenAI(
         base_url=URL,
         api_key=API_KEY,
@@ -155,56 +155,58 @@ def send_request_for_rationale(messages, need_print=False)->str:
 
 # 保证LLM能获得答案，除了恶性情况
 def send_request_for_answer(messages)->str:
-    client = OpenAI(
-        base_url=URL,
-        api_key=API_KEY,
-        http_client=httpx.Client(
-            base_url=URL,
-            follow_redirects=True,
-        ),
-    )
-    completion = client.chat.completions.create(
-        model=MODEL,
-        messages=messages,
-        temperature=0.7
+    # client = OpenAI(
+    #     base_url=URL,
+    #     api_key=API_KEY,
+    #     http_client=httpx.Client(
+    #         base_url=URL,
+    #         follow_redirects=True,
+    #     ),
+    # )
+    # completion = client.chat.completions.create(
+    #     model=MODEL,
+    #     messages=messages,
+    #     temperature=0.7
+    #
+    # )
+    # ori_mes = messages
+    # # 当模型没有给出任何答案的时候，会进入循环
+    # if Util.choose_answer_in_the_end(completion.choices[0].message.content) == "error":
+    #     # print("[][][][][][][][][][][][][][][][")
+    #     # print("encounting loop")
+    #     # print("[][][][][][][][][][][][][][][][\n\n\n")
+    #     wrong_answer = completion.choices[0].message.content
+    #     loop_number = 0
+    #     # 防止模型不给出答案
+    #
+    #     while loop_number < 1:
+    #         loop_number += 1
+    #
+    #         messages.append({"role": "assistant", "content": wrong_answer})
+    #         if Util.choose_answer_in_the_end(wrong_answer) == "error":
+    #             messages.append({"role": "user", "content": LLM_MUST_ANSWER})
+    #             messages.append({"role": "assistant", "content": INDUCE_THE_LLM_TO_ANSWER})
+    #
+    #         wrong_answer = send_request_for_rationale(messages) # 不需要保证有答案，不然就嵌套了
+    #
+    #
+    #         # 因为设计问题，answer只能保留一个字母，无法确定loop是否存在于某个答案中！！！！！！！！！！！！！！！！！！！！！*************************************
+    #         if Util.choose_answer_in_the_end(wrong_answer) != "error":
+    #             # print("loop number is: " , str(loop_number), wrong_answer)
+    #             return wrong_answer
+    #         if loop_number > 2:
+    #             print("LLM refuse to answer, trying to ask it again, loop number is: ", str(loop_number))
+    #     # 如果模型不给出答案，则最后重新试2次发送请求
+    #     for i in range(1):
+    #         wrong_answer = send_request_for_rationale(ori_mes)
+    #         if Util.choose_answer_in_the_end(wrong_answer) != "error":
+    #             return wrong_answer
+    #
+    #     return "error"
+    #
+    print("This function is deprecated, please use send_request instead.")
 
-    )
-    ori_mes = messages
-    # 当模型没有给出任何答案的时候，会进入循环
-    if Util.choose_answer_in_the_end(completion.choices[0].message.content) == "error":
-        # print("[][][][][][][][][][][][][][][][")
-        # print("encounting loop")
-        # print("[][][][][][][][][][][][][][][][\n\n\n")
-        wrong_answer = completion.choices[0].message.content
-        loop_number = 0
-        # 防止模型不给出答案
-
-        while loop_number < 1:
-            loop_number += 1
-
-            messages.append({"role": "assistant", "content": wrong_answer})
-            if Util.choose_answer_in_the_end(wrong_answer) == "error":
-                messages.append({"role": "user", "content": LLM_MUST_ANSWER})
-                messages.append({"role": "assistant", "content": INDUCE_THE_LLM_TO_ANSWER})
-
-            wrong_answer = send_request_for_rationale(messages) # 不需要保证有答案，不然就嵌套了
-
-
-            # 因为设计问题，answer只能保留一个字母，无法确定loop是否存在于某个答案中！！！！！！！！！！！！！！！！！！！！！*************************************
-            if Util.choose_answer_in_the_end(wrong_answer) != "error":
-                # print("loop number is: " , str(loop_number), wrong_answer)
-                return wrong_answer
-            if loop_number > 2:
-                print("LLM refuse to answer, trying to ask it again, loop number is: ", str(loop_number))
-        # 如果模型不给出答案，则最后重新试2次发送请求
-        for i in range(1):
-            wrong_answer = send_request_for_rationale(ori_mes)
-            if Util.choose_answer_in_the_end(wrong_answer) != "error":
-                return wrong_answer
-
-        return "error"
-
-
+    raise Exception
     return completion.choices[0].message.content
 
 
@@ -214,7 +216,7 @@ def use_API(json_obj, TYPE) ->(str, str):
     if TYPE == 1:
         # 先使用CoT思考
         requesting_rationale = build_request_messages(json_obj, TYPE)
-        rationale = send_request_for_rationale(requesting_rationale)
+        rationale = send_request(requesting_rationale)
 
         # 将CoT过程加入模型，输出答案
         requesting_rationale.append({"role": "assistant", "content": rationale})
