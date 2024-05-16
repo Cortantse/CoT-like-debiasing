@@ -51,7 +51,7 @@ if __name__ == '__main__':
             # 按照json格式读取文件
             disambig_num, ambigu_num = 0, 0
             wrong_disambig_num, wrong_ambigu_num = 0, 0
-            for line in f:
+            for i, line in enumerate(f):
                 json_obj = json.loads(line.strip())
                 if json_obj['answer'] == 'error':
                     continue

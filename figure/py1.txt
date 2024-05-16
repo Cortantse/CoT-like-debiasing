@@ -1,0 +1,31 @@
+import matplotlib.pyplot as plt
+
+# Data
+methods = [
+    "Baseline", "Pure CoT", "Anti-bias CoT", "Pro-bias CoT",
+    "Society Mind 2 agents 3 rounds", "Anti-bias Society Mind 2 agents 3 rounds"
+]
+acc_in_ambig = [48.7, 64.5, 76.4, 36.9, 71.0, 86.5]
+acc_in_disambig = [84.6, 72.1, 60.3, 55.9, 85.5, 63.7]
+
+# Plotting
+fig, ax = plt.subplots()
+scatter = ax.scatter(acc_in_ambig, acc_in_disambig, c=range(len(methods)), cmap='viridis', s=100, marker='o')
+
+# Labels and Titles
+ax.set_xlabel('Accuracy in Ambiguous (%)')
+ax.set_ylabel('Accuracy in Disambiguated (%)')
+ax.set_title('Accuracy Comparison across Methods')
+plt.grid(True)
+
+# Adding annotations for each point
+for i, txt in enumerate(methods):
+    ax.annotate(txt, (acc_in_ambig[i], acc_in_disambig[i]), textcoords="offset points", xytext=(0,10), ha='center')
+
+# Color bar
+cbar = plt.colorbar(scatter)
+cbar.set_label('Method Index')
+cbar.set_ticks(range(len(methods)))
+cbar.set_ticklabels(methods)
+
+plt.show()
