@@ -8,6 +8,7 @@
 4、获取答案并将其转变为需要的格式
 5、使用数据集比较
 """
+import random
 import threading
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -163,13 +164,22 @@ class MultiAgentDebate:
         agents = agent_num
         rounds = round_num
 
+        # role-play
+        group_a, group_b = return_group_a_and_group_b(json)
+        # 50 percent of chance to choose each group
+        group = ''
+        if random.random() < 0.5:
+            group = group_a
+        else:
+            group = group_b
+
         # prompt 设计 !!!!!!!!!!
 
         # 问题供后续使用，seek to find 强调了这是一个寻找的问题的过程
         question_prompt = """We seek to find the answer of ""{}"". \n{}""".format(question, CoT_induce_prompt + no_short_cut )
 
         # 建造x个agents的消息存储
-        agent_contexts = [[{"role": "user", "content": question + Based_on_context_prompt }] for agent in range(agents)]
+        agent_contexts = [[{"role": "user", "content": question + role_play.format(group) }] for agent in range(agents)]
         # [[{user}{agent1 answer}],
         # [{user}{agent2 answer}]]
 
@@ -202,7 +212,6 @@ class MultiAgentDebate:
                 # 将生成的答案存储在相应agent中
                 # 若agents太大，那么进行summarize
                 assistant_message = dd.construct_assistant_message(completion)
-                print(assistant_message)
                 if agents < 4:
                     agent_context.append(assistant_message)
                 else:
@@ -510,6 +519,21 @@ def count_tokens_fee(text) -> float:
     return (token_count / 1000) * 0.002
 
 
+def return_group_a_and_group_b(json: json):
+    group_a, group_b = '', ''
+
+    answer_list = ['ans0', 'ans1', 'ans2']
+    for item in answer_list:
+        if json['answer_info'][item][1].lower() != 'unknown':
+            if len(group_a) == 0:
+                group_a = json[item]
+            else:
+                group_b = json[item]
+
+    return group_a, group_b
+
+
+
 
 if __name__ == '__main__':
     file = 'BBQ_jsons/mixed_sample_on_mixed_sample_raw.jsonl'
@@ -521,7 +545,7 @@ if __name__ == '__main__':
     agent_num = 1
     round_num = 1
     MAX_WORKER = 130
-    prefix = f"""{agent_num}agents_{round_num}rounds_based_on_context"""
+    prefix = f"""{agent_num}agents_{round_num}rounds_RP-NoSC-CoT"""
     log_name = 'test'
 
     """

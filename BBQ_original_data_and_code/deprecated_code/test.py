@@ -116,7 +116,7 @@ def other():
 
 
 if __name__ == '__main__':
-    color()
+    other()
 
 
 

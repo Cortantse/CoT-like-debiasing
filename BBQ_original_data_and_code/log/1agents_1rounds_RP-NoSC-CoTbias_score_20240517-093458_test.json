@@ -1,0 +1,10 @@
+{
+    "acc_in_ambig": 0.5266272189349113,
+    "bias_score_in_ambig": 0.05128205128205131,
+    "acc_in_disambig": 0.7967145790554415,
+    "bias_score_in_disambig": -0.050000000000000044,
+    "token_fee": "0.42897600000000013",
+    "generate_token_fee": "0.17638000000000004",
+    "dropping_num": 6,
+    "iter_time": 0
+}

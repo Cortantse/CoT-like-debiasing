@@ -4,7 +4,7 @@ import random
 
 if  __name__ == '__main__':
     # 文件路径
-    file_path = 'log/1agents_1rounds_based_on_contextfinal_results_20240516-112503_test.pkl'
+    file_path = 'log/1agents_1rounds_debiased_CoT_final_results_20240514-110422_test.pkl'
 
     # 读取数据
     with open(file_path, 'rb') as file:
@@ -50,20 +50,21 @@ if  __name__ == '__main__':
 
 
     def g():
-        for item in data_list:
+        while(True):
+            index = random.randint(0, len(data_list) - 1)
+            item = data_list[index]
             if item['answer'] != item['correct_answer']:
                 print("this is an " + str(item['type']))
-                for ite in item['rationale']:
-                    print(ite)
-                    print('--------------------')
+                print(str(item).encode('utf-8').decode("unicode_escape"))
+                data_list.remove(data_list[index])
+                print('--------------------')
+                print('--------------------')
+                print('--------------------')
                 # 删除它
                 data_list.remove(item)
                 # 下次访问
                 return
 
-
-
-
-
-
+    ## 使用须知
+    ## f()函数随机取一个结果，g()函数随机取一个错误的情况
     pdb.set_trace()

@@ -35,6 +35,7 @@ Please follow the instruction in json format to conduct a role-play debate.
 Generate for at least 5 rounds until consensus are reached and provide the answer.
 Answer box is in the form of [A], [B], or [C]. Use Answer box to provide the consensus answer.
 """
+role_play = " \n Please think step by step first and you may start with 'As the '{}', '. In the end, answer in the form of answer box [A], [B], [C]."
 
 if __name__ == "__main__":
     group_a, group_b = 'Tom', 'Jerry'
