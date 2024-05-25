@@ -12,10 +12,17 @@ import random
 import threading
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
+from dashscope import get_tokenizer  # dashscope版本 >= 1.14.0
 import httpx
 import tiktoken
-from config import MODEL, API_KEY, URL
+import transformers
+import logging
+
+from dashscope import Generation
+
+logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR)
+
+from config import *
 from openai import OpenAI
 from tqdm import tqdm
 from dependency import monitor_progress
@@ -30,6 +37,7 @@ import re
 token_fee = [0.0]
 generate_token_fee = [0.0]
 dropping_num = [0]
+not_perfect_context_masked = [0]
 iter_time = [0]
 
 
@@ -98,7 +106,7 @@ class Multi_Agent_in_Single_Agent:
         return consecutive_answers[-1]
 
 
-    def give_answer(self, question, tocken_fee, generate_token_fee, agent_num, round_num, json) -> dict:
+    def give_answer(self, question, token_fee, generate_token_fee, agent_num, round_num, json) -> dict:
         group_a, group_b = '', ''
         answer_list = ['ans0', 'ans1', 'ans2']
         for item in answer_list:
@@ -140,6 +148,257 @@ class Multi_Agent_in_Single_Agent:
         dropping_num[0] += 1
 
 
+class MaskSystem:
+    def __init__(self, agents=None):
+        if agents is None:
+            agents = []
+        self.agents = agents
+
+    def initiate_mask_example(self, question) -> []:
+        messages = []
+        example1_question = mask_asking.copy()
+        example1_question['context'] = example1_context
+        example1_anwer = {
+            "context": example1_context,
+            "task": f"{mask_prompt}",
+            "attributes_involved": example1_attributes_involved,
+            "step1": example1_thinking_step1,
+            "step2": example1_thinking_step2,
+            "context_masked": example1_context_masked,
+        }
+
+        example2_question = mask_asking.copy()
+        example2_question['context'] = example2_context
+        example2_anwer = {
+            "context": example2_context,
+            "task": f"{mask_prompt}",
+            "attributes_involved": example2_attributes_involved,
+            "step1": example2_thinking_step1,
+            "step2": example2_thinking_step2,
+            "context_masked": example2_context_masked,
+        }
+
+        # example3_question = mask_asking.copy()
+        # example3_question['context'] = example3_context
+        # example3_anwer = {
+        #     "context": example3_context,
+        #     "task": f"{mask_prompt}",
+        #     "attributes_involved": example3_attributes_involved,
+        #     "step1": example3_thinking_step1,
+        #     "context_masked": example3_context_masked,
+        # }
+
+        example4_question = mask_asking.copy()
+        example4_question['context'] = example4_context
+        example4_anwer = {
+            "context": example4_context,
+            "task": f"{mask_prompt}",
+            "attributes_involved": example4_attributes_involved,
+            "step1": example4_thinking_step1,
+            "step2": example4_thinking_step2,
+            "context_masked": example4_context_masked,
+        }
+
+        example6_question = mask_asking.copy()
+        example6_question['context'] = example6_context
+        example6_anwer = {
+            "context": example6_context,
+            "task": f"{mask_prompt}",
+            "attributes_involved": example6_attributes_involved,
+            "step1": example6_thinking_step1,
+            "step2": example6_thinking_step2,
+            "context_masked": example6_context_masked,
+        }
+
+        example7_question = mask_asking.copy()
+        example7_question['context'] = example7_context
+        example7_anwer = {
+            "context": example7_context,
+            "task": f"{mask_prompt}",
+            "attributes_involved": example7_attributes_involved,
+            "step1": example7_thinking_step1,
+            "step2": example7_thinking_step2,
+            "context_masked": example7_context_masked,
+        }
+
+        messages.append({'role': 'user', 'content': json.dumps(example1_question)})
+        messages.append({'role': 'assistant', 'content': json.dumps(example1_anwer)})
+
+        messages.append({'role': 'user', 'content': json.dumps(example2_question)})
+        messages.append({'role': 'assistant', 'content': json.dumps(example2_anwer)})
+
+        # messages.append({'role': 'user', 'content': json.dumps(example3_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example3_anwer)})
+
+        messages.append({'role': 'user', 'content': json.dumps(example4_question)})
+        messages.append({'role': 'assistant', 'content': json.dumps(example4_anwer)})
+
+        messages.append({'role': 'user', 'content': json.dumps(example6_question)})
+        messages.append({'role': 'assistant', 'content': json.dumps(example6_anwer)})
+
+        messages.append({'role': 'user', 'content': json.dumps(example7_question)})
+        messages.append({'role': 'assistant', 'content': json.dumps(example7_anwer)})
+
+        # 这里应该要设计随机打乱系统
+        # !!!并且应该每次随机打乱
+
+
+        asking_question = mask_asking.copy()
+        asking_question['context'] = question
+        messages.append({'role': 'user', 'content': json.dumps(asking_question)})
+
+        return messages
+
+
+    def check_mask_context(self, str, context_list):
+        word_list = ['X', 'Y']
+        points = 0
+
+        for word in word_list:
+            count = str.count(word)
+            if count == 1:
+                points += 1
+            elif count >= 2:
+                points += 2
+        context_list.append((points, str))
+
+        for word in word_list:
+            count = str.count(word)
+            if count < 2:
+                raise Exception(f"{word} should appear at least 2 times in the mask context")
+
+    def pre_process_json(self, str):
+        str_new = ""
+        for idx, single_char in enumerate(str):
+            if single_char == '{':
+                while(str[idx]!='}'):
+                    str_new += str[idx]
+                    idx += 1
+                str_new += '}'
+                return str_new
+        return str
+
+
+
+    def give_mask_context(self, question, token_fee, generate_token_fee, json_data, failure_data: []) -> str:
+        messages = self.initiate_mask_example(question)
+        messages.append({'role': 'user', 'content': "You must output in json."})
+
+        context_list = []
+
+        for i in range(5):
+            try:
+                completion, single_token_fee, single_generate_token_fee = generate_answer(messages, MODEL=MODEL_deepseek, API_KEY=API_KEY_deepseek, URL=URL_deepseek)
+                token_fee[0] += single_token_fee
+                generate_token_fee[0] += single_generate_token_fee
+                context = completion.choices[0].message.content
+                context = self.pre_process_json(context)
+                context = json.loads(context)
+                copy_context = context.copy()
+                context = context['context_masked']
+                context = str(context)
+                self.check_mask_context(context, context_list)
+
+                return context
+
+            except Exception as e:
+                # this problem in benign, ignore and retry
+                time.sleep(5)
+                if i > 1 and MODEL == "deepseek-chat":
+                    print("encounting more than 2 times of error in give_mask_context, this is a mild warning for a powerful model like deepseek-chat")
+                failure_data.append({'role': 'assistant', 'content': completion.choices[0].message.content})
+                continue
+
+
+        # choose as many points as possible
+        max_points, max_index = 0, -1
+
+        for i, item in enumerate(context_list):
+
+            if item[0] > max_points:
+                max_points = item[0]
+                max_index = i
+
+        if max_index == -1:
+            dropping_num[0] += 1
+            raise Exception("do not give a mask context")
+
+        not_perfect_context_masked[0] += 1
+        return context_list[max_index][1]
+
+
+    def give_back_ground(self, question, tocken_fee, generate_token_fee, json):
+        pass
+
+    def give_answer_without_social_group(self, context_without_social_group, background, token_fee, generate_token_fee, json) -> (str, str):
+        messages = []
+        messages.append({'role': 'user', 'content': background + '' +  context_without_social_group + CoT_induce_prompt})
+
+        # 尝试获取答案
+        for i in range(3):
+            try:
+                completion, single_token_fee, single_generate_token_fee = generate_answer(messages)
+                token_fee[0] += single_token_fee
+                generate_token_fee[0] += single_generate_token_fee
+                answer = completion.choices[0].message.content
+                try:
+                    parsed_answer = parse_answer(answer)
+                except:
+                    # 解析答案失败，要求重新回答
+                    messages.append({'role': 'assistant', 'content': answer})
+                    messages.append({'role': 'user', 'content': format_requirement})
+                    completion, single_token_fee, single_generate_token_fee = generate_answer(messages)
+                    token_fee[0] += single_token_fee
+                    generate_token_fee[0] += single_generate_token_fee
+                    rationale = answer.copp()
+                    answer = completion.choices[0].message.content
+                    parsed_answer = parse_answer(answer)
+                    return rationale + ' \n' + answer, parsed_answer
+
+                return answer, parsed_answer
+            except Exception as e:
+                time.sleep(5)
+                continue
+
+        raise Exception(f"do not give an answer in 3 times at the last of give_answer_without_social_group")
+
+    def processd_answer_later(self, question, tocken_fee, generate_token_fee, json, answer):
+        # no need now
+        return 'no need now'
+
+    def structure_contexts(self, contexts: [], background, context_without_social_group, answer, answer_parsed_after):
+        contexts.append({'role': 'user', 'content': background + ' \n\n' + context_without_social_group + CoT_induce_prompt})
+        contexts.append({'role': 'assistant', 'content': answer})
+        contexts.append({'role': 'assistant', 'content': answer_parsed_after})
+        return contexts
+
+    def give_answer(self, question, token_fee, generate_token_fee, agent_num, round_num, json_data, failure_data):
+        '''
+            pre condition:
+            need background, context without social group
+            answer
+            answer parsed after(this may not be necessary after)
+        '''
+        background, context_without_social_group, answer, answer_parsed_after = '', '', '', ''
+
+        contexts = []
+        contexts.append({'role': 'user', 'content': question})
+
+        # 默认已经做过错误处理
+        try:
+
+            context_without_social_group = self.give_mask_context(question, token_fee, generate_token_fee, json_data, failure_data)
+            #background = self.give_back_ground(question, tocken_fee, generate_token_fee, json_data)
+            answer, answer_in_single_letter = self.give_answer_without_social_group(context_without_social_group, background, token_fee, generate_token_fee, json_data)
+            #processd_answer_later = self.processd_answer_later(question, tocken_fee, generate_token_fee, json_data, answer)
+            return {'agent_contexts': self.structure_contexts(contexts, background, context_without_social_group, answer, answer_in_single_letter), 'text_answer': answer_in_single_letter}
+        except Exception as e:
+            print("This error should not be reached unless the question is already out of loop, dropping it")
+            print(e)
+            dropping_num[0] +=1
+            return {'error': 'error'}
+
+
 
 
 '''
@@ -153,9 +412,95 @@ class MultiAgentDebate:
         self.agents = agents
 
 
+
+    # advice giver and taker
+    def advice_taker_giver(self, question, tocken_fee, generate_token_fee, json) -> dict:
+        # 注意错误处理
+        # 首先需要生成合格的advice，然后将advice插入到正确的位置，再获取输出/
+        # 有两处地方可能失败，获得advice，和获得答案
+
+
+        message = []
+        # role-play
+        group_a, group_b = return_group_a_and_group_b(json)
+        message.append({"role": "user", "content": question})
+        message.append({'role': 'user', 'content': advice_giver_multiple_analyze_with_stereotype_gpt.format(group_a, group_b)})
+
+        real_advice = ''
+
+        for i in range(4):
+
+            # 获得advice
+            try:
+                advice_content, single_token_fee, single_generate_token_fee = generate_answer(message)
+                token_fee[0] += single_token_fee
+                generate_token_fee[0] += single_generate_token_fee
+            except Exception as e:
+                # print(e)
+                time.sleep(20)
+                continue
+
+            advice = advice_content.choices[0].message.content
+            # print('*'*10)
+            # print(advice)
+            # print('*'*10)
+
+            try:
+                # advice = find_bracket_contents(advice)
+                last_colon_index = advice.rfind(':')
+                advice = advice[last_colon_index + 1:].strip()
+            except Exception as e:
+                time.sleep(1)
+                print("do not parse")
+                continue
+
+            if advice.find('stereotype') == -1 and advice.find('bias') == -1 and advice.find('prejudice') == -1:
+                real_advice = advice
+                break
+
+
+
+        if len(real_advice) == 0:
+            print(advice)
+            dropping_num[0] += 1
+            raise Exception("do not give an good advice")
+
+            return {'error'}
+
+        real_advice = clean_text(advice)
+
+        # 成功获取到了advice
+        # 保存方便看
+        message.append({'role': 'assistant', 'content': real_advice})
+        # 接下来结合advice回答问题
+
+        new_message = [{"role": "user", "content": question + use_advice.format(real_advice)}]
+        for i in range(3):
+            try:
+                completion, single_token_fee, single_generate_token_fee = generate_answer(new_message)
+                token_fee[0] += single_token_fee
+                generate_token_fee[0] += single_generate_token_fee
+                # 解析答案
+                answer = parse_answer(completion.choices[0].message.content)
+                # 解析成功
+                real_answer = answer
+                # 保存记录
+                message.append(new_message[0])
+                message.append({'role': 'assistant', 'content': completion.choices[0].message.content})
+                return {'agent_contexts': message, 'text_answer': real_answer}
+            except Exception as e:
+                # print(e)
+                time.sleep(20)
+                continue
+
+        raise Exception("do not offer a answer in the end of advice")
+        dropping_num[0] += 1
+        return  {'error': 'error'}
+
+
     # 别人的方法
     # 传出一个列表 {agent_contexts: [], text_answer: chr}
-    def give_answer(self, question, tocken_fee, generate_token_fee, agent_num, round_num, json) -> dict:
+    def give_answer(self, question, tocken_fee, generate_token_fee, agent_num, round_num, json, failure_data = None) -> dict:
 
         # 将问题输入到multi-agent系统中
         # 获取答案
@@ -176,10 +521,10 @@ class MultiAgentDebate:
         # prompt 设计 !!!!!!!!!!
 
         # 问题供后续使用，seek to find 强调了这是一个寻找的问题的过程
-        question_prompt = """We seek to find the answer of ""{}"". \n{}""".format(question, CoT_induce_prompt + no_short_cut )
+        question_prompt = """We seek to find the answer of ""{}"". \n{}""".format(question, CoT_induce_prompt)
 
         # 建造x个agents的消息存储
-        agent_contexts = [[{"role": "user", "content": question + role_play.format(group) }] for agent in range(agents)]
+        agent_contexts = [[{"role": "user", "content": question + CoT_induce_prompt }] for agent in range(agents)]
         # [[{user}{agent1 answer}],
         # [{user}{agent2 answer}]]
 
@@ -191,7 +536,28 @@ class MultiAgentDebate:
             generate_token_fee[0] += single_generate_token_fee
             assistant_message = dd.construct_assistant_message(completion)
             agent_contexts[0].append(assistant_message)
+            content = assistant_message['content']
+            answer = ''
+            for alpha in content:
+                if alpha == 'A':
+                    answer = alpha
+                    break
+                elif alpha == 'B':
+                    answer = alpha
+                    break
+                elif alpha == 'C':
+                    answer = alpha
+                    break
+            if answer == '':
+                answer = 'error'
 
+            return {'agent_contexts': agent_contexts, 'text_answer': answer}
+
+        # 使用advice taker
+        if agent_num == 2 and round_num == 1:
+            return self.advice_taker_giver(question, tocken_fee, generate_token_fee, json)
+        elif agent_num == 4 and round_num == 0:
+            return self.mask(question,  tocken_fee, generate_token_fee, json)
 
 
 
@@ -301,7 +667,7 @@ class Benchmark:
 
 
     # 获得答案
-    def run_for_answers(self, MultiAgent_class, agent_num, round_num, max_worker) -> list:
+    def run_for_answers(self, MultiAgent_class, agent_num, round_num, max_worker, failure_data) -> list:
         # run json question concurrently
         # 将问题并行运行，注意，并发对象是Multi-Agent系统！！！
         # jsons 是原始数据 messages是construct好的问题 returned_answers是返回的答案
@@ -321,10 +687,10 @@ class Benchmark:
         bar_thread.start()
 
         # 定义并发函数 并行运行multi-agent系统， 然后先获得answer 再更新进度条
-        def run_multi_agent_concurrently(question: str, answer_list: list, index: int, status_array: list):
+        def run_multi_agent_concurrently(question: str, answer_list: list, index: int, status_array: list, failure_data):
             multi_agent = MultiAgent_class()
             try:
-                answer_list[index] = multi_agent.give_answer(question, token_fee, generate_token_fee, agent_num, round_num, self.test_set[index])
+                answer_list[index] = multi_agent.give_answer(question, token_fee, generate_token_fee, agent_num, round_num, self.test_set[index], failure_data)
 
             except Exception as e:
                 print("Error in multi-agent system, this message comes from the run_multi_agent_concurrently function")
@@ -335,7 +701,7 @@ class Benchmark:
 
         # 使用线程池来运行任务
         with ThreadPoolExecutor(max_workers=max_worker) as executor:
-            futures = [executor.submit(run_multi_agent_concurrently, messages[i], returned_answers, i, status_array) for i in range(num_of_jsons)]
+            futures = [executor.submit(run_multi_agent_concurrently, messages[i], returned_answers, i, status_array, failure_data) for i in range(num_of_jsons)]
 
 
         # 等待进度条线程结束
@@ -366,7 +732,7 @@ class Benchmark:
         acc_in_disambig, bias_score_in_disambig = dd.calculate_acc_bias_score_in_disambig(final_results)
         return {'acc_in_ambig': acc_in_ambig, 'bias_score_in_ambig': bias_score_in_ambig,
                 'acc_in_disambig': acc_in_disambig, 'bias_score_in_disambig': bias_score_in_disambig, 'token_fee': str(token_fee[0]) , 'generate_token_fee': str(generate_token_fee[0]) ,
-                'dropping_num': dropping_num[0], 'iter_time': iter_time[0]}
+                'dropping_num': dropping_num[0], 'iter_time': iter_time[0], 'not_perfect_num': not_perfect_context_masked[0]}
 
 
     # 对结果绘图
@@ -394,7 +760,8 @@ class Benchmark:
 
     # 最后自动运行整个benchmark
     def run_benchmark(self, log_name: str, agent_num, round_num, max_worker, prefix: str = '4agents_3rounds_'):
-        returned_answers = self.run_for_answers(self.multi_agent_system_class, agent_num, round_num, max_worker)
+        failure_data = []
+        returned_answers = self.run_for_answers(self.multi_agent_system_class, agent_num, round_num, max_worker, failure_data)
         final_results = self.pack_results(returned_answers)
         # 保存计算数据
         file_sys = FileSystem(log_name, prefix=prefix)
@@ -402,6 +769,7 @@ class Benchmark:
         # 保存bias分数
         bias_score = self.calculate_bias_score(final_results)
         file_sys.save_bias_score(bias_score)
+        file_sys.save_content_in_binary(failure_data, 'failure')
         # 绘图
         # self.plot_results(final_results)
 
@@ -415,8 +783,8 @@ class Benchmark:
                     print('--------------------')
 
         print(token_fee)
-        import pdb
-        pdb.set_trace()
+        # import pdb
+        # pdb.set_trace()
 
 
 
@@ -426,27 +794,31 @@ class Benchmark:
 '''
 
 # 定义一个函数，用于发送消息，并返回结果。为了防止网络意外，允许重试，但为了调用安全，限制时间
-def generate_answer(messages):
+def generate_answer(messages, MODEL=MODEL, API_KEY=API_KEY, URL=URL):
 
     retries = 0
-    max_retries = 2
+    max_retries = 50
     output = ""
 
     while retries < max_retries:
         try:
-            output, singe_token_fee, single_generate_token_fee = send_request(messages)
+            singe_token_fee, single_generate_token_fee = 0.0, 0.0
+            if MODEL != 'qwen-turbo':
+                output, singe_token_fee, single_generate_token_fee = send_request(messages, MODEL, API_KEY, URL)
+            else:
+                output, singe_token_fee, single_generate_token_fee = send_request_to_Ali(messages)
             return output, singe_token_fee, single_generate_token_fee
         except Exception as e:
             # Log the exception if needed
             retries += 1
-            time.sleep(2)
-            print(f"Exception occur in generate_answer function, with exception {e}")
+            if retries == max_retries:
+                print(f"Failed to send message after {max_retries} retries")
+                print("This message comes from the send_message_safe function")
+                print("This should never happen since loop is so many times")
+                raise Exception("Failed to send message after 2 retries")
+            time.sleep(20)
 
-    if retries >= max_retries:
-        print(f"Failed to send message after {max_retries} retries")
-        print("This message comes from the send_message_safe function")
 
-    raise Exception("Failed to send message after 2 retries")
 
 
 # 定义一个函数来解析答案
@@ -470,7 +842,7 @@ def parse_answer(sentence) -> chr:
     return pre
 
 
-def send_request(messages, need_print=False):
+def send_request(messages, MODEL=MODEL, API_KEY=API_KEY, URL=URL):
     token_fee = 0.0
     generate_token_fee = 0.0
     client = OpenAI(
@@ -484,29 +856,85 @@ def send_request(messages, need_print=False):
     completion = client.chat.completions.create(
         model=MODEL,
         messages=messages,
-        temperature=0.7
+        temperature=0.7,
     )
-    if need_print:
-        print(completion.choices[0].message.content)
-        # print("The length of the rationale is: ", str(len(completion.choices[0].message.content)))
+
     try:
         # 计算请求消息的 token 费用
-        input_tokens_fee = sum(count_tokens_fee(msg['content']) for msg in messages)
+        input_tokens_fee = sum(count_tokens_fee(msg['content'], if_input = True) for msg in messages)
         token_fee += input_tokens_fee  # 更新全局 token 费用
-        token_fee += count_tokens_fee(completion.choices[0].message.content)
-        generate_token_fee = count_tokens_fee(completion.choices[0].message.content)
+        token_fee += count_tokens_fee(completion.choices[0].message.content, if_input = False)
+        generate_token_fee = count_tokens_fee(completion.choices[0].message.content, if_input = False)
+    except:
+        raise Exception("tocken_fee error")
+    return completion, token_fee, generate_token_fee
+
+
+def send_request_to_Ali(messages, need_print=False):
+    token_fee = 0.0
+    generate_token_fee = 0.0
+    # 调用 API 获取响应
+    responses = Generation.call("qwen-turbo",
+                                messages=messages,
+                                result_format='message',  # 设置输出为'message'格式
+                                stream=False,  # 设置输出方式为流式输出
+                                incremental_output=False,  # 增量式流式输出
+                                api_key=API_KEY
+                                )
+    # 兼容之前的获取方式，将 responses 转换为 completion
+    choices = [Choice(c['finish_reason'], Message(c['message']['role'], c['message']['content'])) for c in
+               responses['output']['choices']]
+    completion = Completion(choices)
+
+    try:
+        # 计算请求消息的 token 费用
+        input_tokens_fee = sum(count_tokens_fee(msg['content'], if_input = True) for msg in messages)
+        token_fee += input_tokens_fee  # 更新全局 token 费用
+        token_fee += count_tokens_fee(completion.choices[0].message.content, if_input = False)
+        generate_token_fee = count_tokens_fee(completion.choices[0].message.content, if_input = False)
     except:
         raise Exception("tocken_fee error")
     return completion, token_fee, generate_token_fee
 
 
 
-def count_tokens_fee(text) -> float:
+
+
+
+def count_tokens_fee(text, if_input = True) -> float:
 
     # 从 model_dict 字典中，根据 model_version 参数获取相应的语言模型
     model = MODEL
 
     # 使用 tiktoken.encoding_for_model 方法，获取该模型的标记化编码器
+    if model == 'gpt-4o':
+        model = 'gpt-4-turbo'
+    elif model == 'deepseek-chat':
+        chat_tokenizer_dir = "./"
+
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
+            chat_tokenizer_dir, trust_remote_code=True
+        )
+
+        result = tokenizer.encode(text)
+        if if_input:
+            return len(result) / 1000000 * 0.0014
+        else:
+            return len(result) / 1000000 * 0.0028
+    elif model == 'qwen-turbo':
+
+        # 获取tokenizer对象，目前只支持通义千问系列模型
+        tokenizer = get_tokenizer('qwen-turbo')
+
+        # 将字符串切分成token并转换为token id
+        tokens = tokenizer.encode(text)
+        if if_input:
+            return len(tokens) / 1000 * 0.002 / 7.16
+        else:
+            return len(tokens) / 1000 * 0.006 / 7.16
+
+
+
     encoding = tiktoken.encoding_for_model(model)
 
     # 使用编码器的 encode 方法，对输入的 text 进行标记化处理，得到一个标记列表
@@ -534,27 +962,76 @@ def return_group_a_and_group_b(json: json):
 
 
 
+# 用于转换
+class Message:
+    def __init__(self, role, content):
+        self.role = role
+        self.content = content
+
+class Choice:
+    def __init__(self, finish_reason, message):
+        self.finish_reason = finish_reason
+        self.message = message
+
+class Completion:
+    def __init__(self, choices):
+        self.choices = choices
+
+def clean_text(text):
+    # 去除非字母和非基本标点的字符
+    cleaned_text = re.sub(r'[^\w\s,.!?;:]', '', text)
+    # 替换文本中的换行符和多余的空格
+    cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
+    return cleaned_text
+
+
+def find_bracket_contents(text):
+    # Find all occurrences of the pattern [xxx]
+    matches = re.findall(r'\[(.*?)\]', text)
+
+    if len(matches) >= 1:
+        context = ''
+        for i in matches:
+            context += i
+        return context
+    else:
+        # If zero or more than one matches, raise an error
+        raise ValueError("There should be exactly one [xxx] format in the text.")
+
 
 if __name__ == '__main__':
-    file = 'BBQ_jsons/mixed_sample_on_mixed_sample_raw.jsonl'
 
-    jsons = dd.read_jsonl(file)
-    jsons = jsons[:1000]
-    bench = Benchmark(jsons, MultiAgentDebate)
+    # 需要采样几次
+    ITER_NUM = 2
 
-    agent_num = 1
-    round_num = 1
-    MAX_WORKER = 130
-    prefix = f"""{agent_num}agents_{round_num}rounds_RP-NoSC-CoT"""
-    log_name = 'test'
+    for i in range(1, ITER_NUM):
 
-    """
-    agent = 1 round_num = 888 表示debate
-    agent = 1 round_num = 0 表示直接采样，无CoT
-    agent = 1 round_num = 1 表示单次采样，有CoT
-    agent > 1 round_num = 1 表示多次采样，Self-consistency CoT
-    agent = 1 round_num > 1 表示单次采样后进行self-reflect
-    """
+        token_fee[0] = 0.0
+        generate_token_fee[0] = 0.0
 
-    bench.run_benchmark(log_name=log_name, agent_num=agent_num, round_num=round_num, max_worker=MAX_WORKER, prefix=prefix)
+
+        from sample import *
+
+        jsons = sample_jsons()
+
+        bench = Benchmark(jsons, MaskSystem)
+
+        agent_num = 4
+        round_num = 0
+        MAX_WORKER = 100
+
+        prefix = f"""{agent_num}agents_{round_num}rounds_DS_GPT_test_{i}_"""
+        log_name = 'test'
+
+        """
+        agent = 1 round_num = 888 表示debate
+        agent = 1 round_num = 0 表示直接采样，无CoT
+        agent = 1 round_num = 1 表示单次采样，有CoT
+        agent > 1 round_num = 1 表示多次采样，Self-consistency CoT
+        agent = 1 round_num > 1 表示单次采样后进行self-reflect
+        agent = 2 round_num = 1 表示advice
+        agent = 4 round_num = 0 indicates masking strategies
+        """
+
+        bench.run_benchmark(log_name=log_name, agent_num=agent_num, round_num=round_num, max_worker=MAX_WORKER, prefix=prefix)
 

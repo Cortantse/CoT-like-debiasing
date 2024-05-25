@@ -1,6 +1,11 @@
 import re
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
+from dashscope import Generation
+from tqdm import tqdm
 
 
 def check_validity(input_str):
@@ -114,9 +119,49 @@ def other():
     plt.tight_layout()  # Adjust layout to make room for label rotation
     plt.show()
 
+def monitor_progress(pbar, status_array, num_of_jsons):
+    while True:
+        processed = sum(status_array)
+        pbar.n = processed
+        pbar.refresh()
+        if processed == num_of_jsons:
+            break
+        time.sleep(1)  # Update every 1 second
+
+class Message:
+    def __init__(self, role, content):
+        self.role = role
+        self.content = content
+
+class Choice:
+    def __init__(self, finish_reason, message):
+        self.finish_reason = finish_reason
+        self.message = message
+
+class Completion:
+    def __init__(self, choices):
+        self.choices = choices
+
 
 if __name__ == '__main__':
-    other()
+    import re
+
+
+    def find_bracket_contents(text):
+        # Find all occurrences of the pattern [xxx]
+        matches = re.findall(r'\[(.*?)\]', text)
+
+        if len(matches) >= 1:
+            context = ''
+            for i in matches:
+                context += " " + i
+            return context
+        else:
+            # If zero or more than one matches, raise an error
+            raise ValueError("There should be exactly one [xxx] format in the text.")
+
+    print(find_bracket_contents("ajenfgeajbnf [nihao] , [ that's great] "))
+
 
 
 
