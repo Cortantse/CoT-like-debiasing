@@ -3,8 +3,10 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+import httpx
 import pandas as pd
 from dashscope import Generation
+from openai import OpenAI
 from tqdm import tqdm
 
 
@@ -143,24 +145,121 @@ class Completion:
         self.choices = choices
 
 
+# class Multi_Agent_in_Single_Agent:
+#     def __init__(self, agents=None):
+#         if agents is None:
+#             agents = []
+#         self.agents = agents
+#
+#     def parse_answer(self, sentence: str) -> str:
+#         import re
+#         # 匹配所有的答案框
+#         answer_boxes = re.findall(r'\[([A-Z])\]', sentence)
+#         if not answer_boxes:
+#             raise ValueError("No answer box found")
+#
+#         # 初始化一个空列表来存储连续的ABC答案
+#         consecutive_answers = []
+#
+#         # 从后向前检查答案框
+#         for answer in reversed(answer_boxes):
+#             if answer in 'ABC':
+#                 consecutive_answers.append(answer)
+#             else:
+#                 break  # 遇到非ABC答案，停止记录
+#
+#         # 检查是否有连续的答案并且是否一致
+#         if not consecutive_answers or len(set(consecutive_answers)) > 1:
+#             raise ValueError("Invalid or inconsistent answer box sequence")
+#
+#         # 如果一致，返回最后记录的答案
+#         return consecutive_answers[-1]
+#
+#
+#     def give_answer(self, question, agent_num, round_num, json) -> dict:
+#         group_a, group_b = '', ''
+#         answer_list = ['ans0', 'ans1', 'ans2']
+#         for item in answer_list:
+#             if json['answer_info'][item][1].lower() != 'unknown':
+#                 if len(group_a) == 0:
+#                     group_a = json[item]
+#                 else:
+#                     group_b = json[item]
+#         prompt = debate_prompt.format(question, group_a, group_a, group_a, group_b, group_b, group_b, group_a, group_b)
+#
+#         agent_contexts = [{"role": "user", "content": prompt}]
+#
+#         for i in range(3):
+#             try:
+#                 completion, single_token_fee, single_generate_token_fee = generate_answer(agent_contexts)
+#                 token_fee[0] += single_token_fee
+#                 generate_token_fee[0] += single_generate_token_fee
+#                 assistant_message = dd.construct_assistant_message(completion)
+#                 # 尝试解析答案 后 成功再添加
+#                 try:
+#                     answer_to_be_parsed = assistant_message['content']
+#
+#
+#                     text_answer = self.parse_answer(answer_to_be_parsed)
+#                     # success
+#                     agent_contexts.append(assistant_message)
+#                     return {'agent_contexts': agent_contexts, 'text_answer': text_answer}
+#                 except Exception as e:
+#                     # this is common
+#                     iter_time[0] += 1
+#                     continue
+#
+#             except Exception as e:
+#                 print("Error in having completion, this message comes from the give_answer_agents_debate function")
+#                 print(e)
+#                 time.sleep(20)
+#                 continue
+#
+#         dropping_num[0] += 1
+
+
 if __name__ == '__main__':
     import re
 
+    import re
+    from collections import defaultdict
 
-    def find_bracket_contents(text):
-        # Find all occurrences of the pattern [xxx]
-        matches = re.findall(r'\[(.*?)\]', text)
 
-        if len(matches) >= 1:
-            context = ''
-            for i in matches:
-                context += " " + i
-            return context
-        else:
-            # If zero or more than one matches, raise an error
-            raise ValueError("There should be exactly one [xxx] format in the text.")
+    MODEL = 'gpt-3.5-turbo'
+    API_KEY = "sk-9z7X9Wy5gCMcNpNW2399924a882c4690Aa51C63a599c3b6d"
 
-    print(find_bracket_contents("ajenfgeajbnf [nihao] , [ that's great] "))
+    URL = 'https://api.xty.app/v1'
+
+    TEMPERATURE = 0.7
+
+    MAX_ITER_IN_MASK = 5
+    MAX_ITER_IN_ANSWER = 3
+    MAX_ITER_IN_BACKGROUND = 3
+    def send_request(messages, MODEL=MODEL, API_KEY=API_KEY, URL=URL):
+        token_fee_shadow = 0.0
+        generate_token_fee_shadow = 0.0
+        client = OpenAI(
+            base_url=URL,
+            api_key=API_KEY,
+            http_client=httpx.Client(
+                base_url=URL,
+                follow_redirects=True,
+            ),
+        )
+        completion = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            temperature=TEMPERATURE,
+        )
+        try:
+            return completion.choices[0].message.content
+        except Exception as e:
+            print(e)
+            print(completion)
+
+
+    print(send_request([{'role': 'user', 'content': 'hello world'}]))
+
 
 
 
