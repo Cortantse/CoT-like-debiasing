@@ -174,13 +174,19 @@ samples  = {
     # 'Mask with XY gpt-3.5 main model, deep-seek mask model': np.array([
     #     [0.01008064516129032, 0.9336016096579477],
     # ]),
-    'filtered in masking|without background': np.array([
+    'filtered in masking | without background': np.array([
         [0.03413654618473893, 0.845691382765531],
     ]),
-    'filtered in masking|with neutral background': np.array([
+    'filtered in masking | with neutral background': np.array([
         [0.03012048192771083, 0.8868686868686869],
     ]),
-    'not_filter in masking|without background': np.array([
+    'filtered in masking | with positive background': np.array([
+        [0.036000000000000004, 0.806]
+    ]),
+    'filtered in masking | with positive background Deep Seek': np.array([
+        [0.08199999999999996, 0.7675350701402806]
+    ]),
+    'not_filter in masking | without background': np.array([
         [0.007999999999999972, 0.8777555110220441],
     ]),
     # 'Advice with Stereo': np.array([

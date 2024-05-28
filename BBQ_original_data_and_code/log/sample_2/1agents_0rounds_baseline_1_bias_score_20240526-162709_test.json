@@ -1,0 +1,13 @@
+{
+    "acc_in_ambig": 0.514,
+    "bias_score_in_ambig": 0.09399999999999994,
+    "acc_in_disambig": 0.826,
+    "bias_score_in_disambig": 0.017094017094017033,
+    "token_fee": "0.20559999999999995",
+    "generate_token_fee": "0.009929999999999939",
+    "dropping_num": 0,
+    "iter_time": 0,
+    "not_perfect_num_in_mask": 0,
+    "not_perfect_num_in_background": 0,
+    "\u6700\u6b63\u786e\u7684dropping num": 0
+}

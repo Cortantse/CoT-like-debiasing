@@ -26,6 +26,7 @@ from config import *
 from openai import OpenAI
 from tqdm import tqdm
 from dependency import monitor_progress
+from dependency import read_jsonl
 import dependency as dd
 from prompts import *
 from dependency import construct_question_from_json
@@ -40,6 +41,18 @@ generate_token_fee = [0.0]
 dropping_num = [0]
 not_perfect_context_masked = [0]
 iter_time = [0]
+dropping_num_due_to_background = [0]
+not_perfect_background_generation = [0]
+definite_dropping_num = [0]
+
+masking_actual_usage = [0]
+back_ground_actual_usage = [0]
+CoT_asking_actual_usage = [0]
+
+DATA_LIST = []
+DEADLY_SIGNAL = False
+
+global_prompt = ""
 
 
 '''
@@ -151,23 +164,34 @@ class MaskSystem:
             "context_masked": example7_context_masked,
         }
 
-        messages.append({'role': 'user', 'content': json.dumps(example1_question)})
-        messages.append({'role': 'assistant', 'content': json.dumps(example1_anwer)})
+        messages_list = []
+        messages_list.append((example1_question, example1_anwer))
+        messages_list.append((example2_question, example2_anwer))
+        messages_list.append((example4_question, example4_anwer))
+        messages_list.append((example6_question, example6_anwer))
+        messages_list.append((example7_question, example7_anwer))
 
-        messages.append({'role': 'user', 'content': json.dumps(example2_question)})
-        messages.append({'role': 'assistant', 'content': json.dumps(example2_anwer)})
+        random.shuffle(messages_list)
 
-        # messages.append({'role': 'user', 'content': json.dumps(example3_question)})
-        # messages.append({'role': 'assistant', 'content': json.dumps(example3_anwer)})
+        for item in messages_list:
+            messages.append({'role': 'user', 'content': json.dumps(item[0])})
+            messages.append({'role': 'assistant', 'content': json.dumps(item[1])})
 
-        messages.append({'role': 'user', 'content': json.dumps(example4_question)})
-        messages.append({'role': 'assistant', 'content': json.dumps(example4_anwer)})
-
-        messages.append({'role': 'user', 'content': json.dumps(example6_question)})
-        messages.append({'role': 'assistant', 'content': json.dumps(example6_anwer)})
-
-        messages.append({'role': 'user', 'content': json.dumps(example7_question)})
-        messages.append({'role': 'assistant', 'content': json.dumps(example7_anwer)})
+        # messages.append({'role': 'user', 'content': json.dumps(example1_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example1_anwer)})
+        #
+        # messages.append({'role': 'user', 'content': json.dumps(example2_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example2_anwer)})
+        #
+        #
+        # messages.append({'role': 'user', 'content': json.dumps(example4_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example4_anwer)})
+        #
+        # messages.append({'role': 'user', 'content': json.dumps(example6_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example6_anwer)})
+        #
+        # messages.append({'role': 'user', 'content': json.dumps(example7_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example7_anwer)})
 
         # 这里应该要设计随机打乱系统
         # !!!并且应该每次随机打乱
@@ -179,32 +203,85 @@ class MaskSystem:
 
         return messages
 
+    def normalize_context(self, text):
+        if not isinstance(text, str):
+            raise ValueError("Input must be a string")
+        text = text.replace("""\'""", """\"""")
+
+        # 将字符串转换为字典
+        try:
+            context_dict = json.loads(text)
+        except json.JSONDecodeError:
+            raise ValueError("Input string is not a valid JSON")
+
+        # 连接所有值，并删除符号
+        normalized_text = ' '.join(context_dict.values()).replace('[', '').replace(']', '')
+
+        return normalized_text
+
+
     def initiate_background_example_pure_join(self, masked_context, unmasked_context):
         messages = []
 
-        example1_question = background_asking.copy()
+        example1_question = background_asking_neutral.copy()
         example1_question['unmasked_context'] = example1_background_unmasked_context
         example1_question['masked_context'] =  example1_background_masked_context
 
-        example2_question = background_asking.copy()
+        example2_question = background_asking_neutral.copy()
         example2_question['unmasked_context'] = example2_background_unmasked_context
         example2_question['masked_context'] =  example2_background_masked_context
 
-        example3_question = background_asking.copy()
+        example3_question = background_asking_neutral.copy()
         example3_question['unmasked_context'] = example3_background_unmasked_context
         example3_question['masked_context'] =  example3_background_masked_context
 
+        example4_question = background_asking_neutral.copy()
+        example4_question['unmasked_context'] = example4_background_unmasked_context
+        example4_question['masked_context'] =  example4_background_masked_context
 
-        messages.append({'role': 'user', 'content': json.dumps(example1_question)})
-        messages.append({'role': 'assistant', 'content': json.dumps(example1_background_response)})
+        example5_question = background_asking_neutral.copy()
+        example5_question['unmasked_context'] = example5_background_unmasked_context
+        example5_question['masked_context'] =  example5_background_masked_context
 
-        messages.append({'role': 'user', 'content': json.dumps(example2_question)})
-        messages.append({'role': 'assistant', 'content': json.dumps(example2_background_response)})
+        example6_question = background_asking_neutral.copy()
+        example6_question['unmasked_context'] = example6_background_unmasked_context
+        example6_question['masked_context'] =  example6_background_masked_context
 
-        messages.append({'role': 'user', 'content': json.dumps(example3_question)})
-        messages.append({'role': 'assistant', 'content': json.dumps(example3_background_response)})
 
-        asking_question = background_asking.copy()
+        messages_list = []
+        messages_list.append((example1_question, example1_background_response))
+        messages_list.append((example2_question, example2_background_response))
+        messages_list.append((example3_question, example3_background_response))
+        messages_list.append((example4_question, example4_background_response))
+        messages_list.append((example5_question, example5_background_response))
+        messages_list.append((example6_question, example6_background_response))
+
+        random.shuffle(messages_list)
+
+        for item in messages_list:
+            messages.append({'role': 'user', 'content': json.dumps(item[0])})
+            messages.append({'role': 'assistant', 'content': json.dumps(item[1])})
+
+
+        # messages.append({'role': 'user', 'content': json.dumps(example1_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example1_background_response)})
+        #
+        # messages.append({'role': 'user', 'content': json.dumps(example2_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example2_background_response)})
+        #
+        # messages.append({'role': 'user', 'content': json.dumps(example3_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example3_background_response)})
+        #
+        # messages.append({'role': 'user', 'content': json.dumps(example4_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example4_background_response)})
+        #
+        # messages.append({'role': 'user', 'content': json.dumps(example5_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example5_background_response)})
+        #
+        # messages.append({'role': 'user', 'content': json.dumps(example6_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example6_background_response)})
+
+        asking_question = background_asking_neutral.copy()
         asking_question['unmasked_context'] = unmasked_context
         asking_question['masked_context'] = masked_context
         messages.append({'role': 'user', 'content': json.dumps(asking_question)})
@@ -230,19 +307,46 @@ class MaskSystem:
         example4_question['unmasked_context'] = example4_background_unmasked_context
         example4_question['masked_context'] =  example4_background_masked_context
 
+        example5_question = background_asking.copy()
+        example5_question['unmasked_context'] = example5_background_unmasked_context
+        example5_question['masked_context'] =  example5_background_masked_context
+
+        example6_question = background_asking.copy()
+        example6_question['unmasked_context'] = example6_background_unmasked_context
+        example6_question['masked_context'] =  example6_background_masked_context
 
 
-        messages.append({'role': 'user', 'content': json.dumps(example1_question)})
-        messages.append({'role': 'assistant', 'content': json.dumps(example1_background_response_positive)})
+        messages_list = []
+        messages_list.append((example1_question, example1_background_response_positive))
+        messages_list.append((example2_question, example2_background_response_positive))
+        messages_list.append((example3_question, example3_background_response_positive))
+        messages_list.append((example4_question, example4_background_response_positive))
+        messages_list.append((example5_question, example5_background_response_positive))
+        messages_list.append((example6_question, example6_background_response_positive))
 
-        messages.append({'role': 'user', 'content': json.dumps(example2_question)})
-        messages.append({'role': 'assistant', 'content': json.dumps(example2_background_response_positive)})
+        random.shuffle(messages_list)
 
-        messages.append({'role': 'user', 'content': json.dumps(example3_question)})
-        messages.append({'role': 'assistant', 'content': json.dumps(example3_background_response_positive)})
+        for item in messages_list:
+            messages.append({'role': 'user', 'content': json.dumps(item[0])})
+            messages.append({'role': 'assistant', 'content': json.dumps(item[1])})
 
-        messages.append({'role': 'user', 'content': json.dumps(example4_question)})
-        messages.append({'role': 'assistant', 'content': json.dumps(example4_background_response_positive)})
+        # messages.append({'role': 'user', 'content': json.dumps(example1_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example1_background_response_positive)})
+        #
+        # messages.append({'role': 'user', 'content': json.dumps(example2_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example2_background_response_positive)})
+        #
+        # messages.append({'role': 'user', 'content': json.dumps(example3_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example3_background_response_positive)})
+        #
+        # messages.append({'role': 'user', 'content': json.dumps(example4_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example4_background_response_positive)})
+        #
+        # messages.append({'role': 'user', 'content': json.dumps(example5_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example5_background_response_positive)})
+        #
+        # messages.append({'role': 'user', 'content': json.dumps(example6_question)})
+        # messages.append({'role': 'assistant', 'content': json.dumps(example6_background_response_positive)})
 
         asking_question = background_asking.copy()
         asking_question['unmasked_context'] = unmasked_context
@@ -301,6 +405,7 @@ class MaskSystem:
                 token_fee[0] += single_token_fee
                 generate_token_fee[0] += single_generate_token_fee
                 context = completion.choices[0].message.content
+                masking_actual_usage[0] += 1
                 context = self.pre_process_json(context)
                 context = json.loads(context)
                 copy_context = context.copy()
@@ -310,7 +415,6 @@ class MaskSystem:
                     self.check_mask_context(context, context_list)
 
                 return context
-
             except Exception as e:
                 # this problem in benign, ignore and retry
                 time.sleep(5)
@@ -337,13 +441,68 @@ class MaskSystem:
         not_perfect_context_masked[0] += 1
         return context_list[max_index][1]
 
-    def check_background_context(self, context):
+    def check_background_context_positive(self, context, context_list):
         word_list = ['X', 'Y']
 
         for word in word_list:
             count = context.count(word)
             if count == 0:
                 raise Exception("no X or Y in the background context")
+
+        # 使用正则表达式匹配所有方括号 [] 中的内容
+        matches = re.findall(r'\[(.*?)\]', context)
+
+        points = len(matches)
+
+        # 如果匹配到的内容少于两个，抛出异常
+        if len(matches) < 2:
+            raise Exception("less than 2 matches in the background context")
+
+        def word_similarity(text1, text2):
+            # 将文本转为小写并移除标点符号
+            text1 = re.sub(r'[^\w\s]', '', text1.lower())
+            text2 = re.sub(r'[^\w\s]', '', text2.lower())
+
+            # 将文本分割成单词集合
+            words1 = set(text1.split())
+            words2 = set(text2.split())
+
+            # 计算交集和并集
+            intersection = words1.intersection(words2)
+            union = words1.union(words2)
+
+            # 计算Jaccard相似度
+            if not union:
+                return 0.0  # 避免除以零
+            similarity = len(intersection) / len(union)
+            return similarity
+
+        points += word_similarity(matches[0], matches[1]) * 10
+
+        # 检查所有匹配内容是否相同
+        first_match = matches[0]
+        for match in matches:
+            if match != first_match:
+                context = re.sub(r'\[.*?\]', f'[{first_match}]', context)
+                context_list.append((points, context))
+                raise Exception("uncohersive matches in the background context")
+
+    def check_background_context_neutral(self, context, context_list):
+        word_list = ['X', 'Y']
+        points = 0
+
+        for word in word_list:
+            count = context.count(word)
+            if count == 0:
+                raise Exception("no X or Y in the background context")
+            points += 1 + count * 0.1
+
+        if points < 2.2:
+            context_list.append((points, context))
+            # because each 2 is ok
+            # 1 + 0.1 + 1 + 0.1 = 2.2
+            raise Exception(f"points should be 2 in the background context, now points {points}")
+
 
 
     def give_back_ground(self, masked_context, unmasked_context, json_data):
@@ -356,10 +515,12 @@ class MaskSystem:
 
         messages.append({'role': 'user', 'content': "You must output in json."})
         # print(messages)
+        context_list = []
 
         for i in range(MAX_ITER_IN_MASK):
             try:
                 completion, single_token_fee, single_generate_token_fee = generate_answer(messages)
+                back_ground_actual_usage[0] += 1
                 token_fee[0] += single_token_fee
                 generate_token_fee[0] += single_generate_token_fee
                 context = completion.choices[0].message.content
@@ -376,7 +537,12 @@ class MaskSystem:
                 context = str(context)
                 # print(context)
                 # print('*'*20)
-                self.check_background_context(context)
+                if BACK_GROUND_INDEX == 2 and IF_CHECK_IN_BACKGROUND:
+                    self.check_background_context_positive(context, context_list)
+                if BACK_GROUND_INDEX == 1 and IF_CHECK_IN_BACKGROUND:
+                    self.check_background_context_neutral(context, context_list)
+                context = self.normalize_context(context)
+
 
                 return context
 
@@ -387,9 +553,25 @@ class MaskSystem:
                 print(context)
                 continue
 
+        # choose as many points as possible
+        max_points, max_index = 0, -1
+
+        for i, item in enumerate(context_list):
+
+            if item[0] > max_points:
+                max_points = item[0]
+                max_index = i
+
+        if max_index != -1:
+            not_perfect_background_generation[0] += 1
+            return self.normalize_context(context_list[max_index][1])
+
         print("do not give a good background")
         dropping_num[0] += 1
+        if BACK_GROUND_INDEX == 2:
+            dropping_num_due_to_background[0] += 1
         raise Exception("no good background")
+
 
 
     def give_answer_without_social_group(self, context_without_social_group, background, json) -> (str, str):
@@ -587,34 +769,30 @@ class MultiAgentDebate:
         question_prompt = """We seek to find the answer of ""{}"". \n{}""".format(question, CoT_induce_prompt)
 
         # 建造x个agents的消息存储
-        agent_contexts = [[{"role": "user", "content": question + debiased_CoT_induce_prompt }] for agent in range(agents)]
+        agent_contexts = [[{"role": "user", "content": question + global_prompt }] for agent in range(agents)]
         # [[{user}{agent1 answer}],
         # [{user}{agent2 answer}]]
 
         # 假设直接得出答案的情况
         if rounds == 0:
-            agent_contexts = [[{"role": "user", "content": question + induce_single_answer}] for agent in range(agents)]
-            completion, single_token_fee, single_generate_token_fee = generate_answer(agent_contexts[0])
-            token_fee[0] += single_token_fee
-            generate_token_fee[0] += single_generate_token_fee
-            assistant_message = dd.construct_assistant_message(completion)
-            agent_contexts[0].append(assistant_message)
-            content = assistant_message['content']
-            answer = ''
-            for alpha in content:
-                if alpha == 'A':
-                    answer = alpha
-                    break
-                elif alpha == 'B':
-                    answer = alpha
-                    break
-                elif alpha == 'C':
-                    answer = alpha
-                    break
-            if answer == '':
-                answer = 'error'
+            for i in range(3):
+                agent_contexts = [[{"role": "user", "content": question + induce_single_answer}] for agent in range(agents)]
+                completion, single_token_fee, single_generate_token_fee = generate_answer(agent_contexts[0])
+                token_fee[0] += single_token_fee
+                generate_token_fee[0] += single_generate_token_fee
+                assistant_message = dd.construct_assistant_message(completion)
+                agent_contexts[0].append(assistant_message)
+                content = assistant_message['content']
+                try:
+                    answer = parse_answer(content)
+                except Exception as e:
+                    print(e)
+                    print(content)
+                    continue
 
-            return {'agent_contexts': agent_contexts, 'text_answer': answer}
+                return {'agent_contexts': agent_contexts, 'text_answer': answer}
+            # fail
+            raise Exception('baseline fail')
 
         # 使用advice taker
         if agent_num == 2 and round_num == 1:
@@ -628,16 +806,27 @@ class MultiAgentDebate:
             # 有几个agent就进行几次
             for i, agent_context in enumerate(agent_contexts):
 
-                if round != 0:
-                    # 创建了一个不包含当前 agent 的上下文信息
-                    agent_contexts_other = agent_contexts[:i] + agent_contexts[i + 1:]
-                    message = dd.construct_message(agent_contexts_other, question_prompt, 2 * round - 1)
-                    agent_context.append(message)
+                for _ in range(MAX_ITER_IN_MULTI_AGENT):
+                    if round != 0:
+                        # 创建了一个不包含当前 agent 的上下文信息
+                        agent_contexts_other = agent_contexts[:i] + agent_contexts[i + 1:]
+                        message = dd.construct_message(agent_contexts_other, question_prompt, 2 * round - 1)
+                        agent_context.append(message)
 
 
-                completion, single_token_fee, single_generate_token_fee = generate_answer(agent_context)
-                token_fee[0] += single_token_fee
-                generate_token_fee[0] += single_generate_token_fee
+                    completion, single_token_fee, single_generate_token_fee = generate_answer(agent_context)
+                    CoT_asking_actual_usage[0] += 1
+                    token_fee[0] += single_token_fee
+                    generate_token_fee[0] += single_generate_token_fee
+
+                    try:
+                        parse_answer(completion.choices[0].message.content)
+                        break
+                    except:
+                        continue
+
+
+
                 # 将生成的答案存储在相应agent中
                 # 若agents太大，那么进行summarize
                 assistant_message = dd.construct_assistant_message(completion)
@@ -793,9 +982,20 @@ class Benchmark:
     def calculate_bias_score(self, final_results: list) -> dict:
         acc_in_ambig, bias_score_in_ambig = dd.calculate_acc_bias_score_in_ambiguous(final_results)
         acc_in_disambig, bias_score_in_disambig = dd.calculate_acc_bias_score_in_disambig(final_results)
+        try:
+            DATA_LIST.append({'acc_in_ambig': acc_in_ambig, 'bias_score_in_ambig': bias_score_in_ambig,
+                'acc_in_disambig': acc_in_disambig, 'bias_score_in_disambig': bias_score_in_disambig, 'token_fee': str(token_fee[0]) , 'generate_token_fee': str(generate_token_fee[0]) ,
+                'dropping_num': dropping_num[0], 'iter_time': iter_time[0], 'not_perfect_num_in_mask': not_perfect_context_masked[0], 'not_perfect_num_in_background': not_perfect_background_generation[0], 'ensured_dropping num': definite_dropping_num[0],
+                'acutal_usage_in_mask': masking_actual_usage[0], 'acutal_usage_in_background': back_ground_actual_usage[0], 'CoT_actual_usage': CoT_asking_actual_usage[0]}
+)
+        except:
+            print('not good')
+            URL = 'www.baidu.com'
         return {'acc_in_ambig': acc_in_ambig, 'bias_score_in_ambig': bias_score_in_ambig,
                 'acc_in_disambig': acc_in_disambig, 'bias_score_in_disambig': bias_score_in_disambig, 'token_fee': str(token_fee[0]) , 'generate_token_fee': str(generate_token_fee[0]) ,
-                'dropping_num': dropping_num[0], 'iter_time': iter_time[0], 'not_perfect_num': not_perfect_context_masked[0]}
+                'dropping_num': dropping_num[0], 'iter_time': iter_time[0], 'not_perfect_num_in_mask': not_perfect_context_masked[0], 'not_perfect_num_in_background': not_perfect_background_generation[0], 'ensured_dropping num': definite_dropping_num[0],
+                'acutal_usage_in_mask': masking_actual_usage[0], 'acutal_usage_in_background': back_ground_actual_usage[0], 'CoT_actual_usage': CoT_asking_actual_usage[0]}
+
 
 
     # 对结果绘图
@@ -839,6 +1039,9 @@ class Benchmark:
 
         if_bias = False
         if_unknown = False
+
+        if returned_answer != 'A' and returned_answer != 'B' and returned_answer != 'C':
+            definite_dropping_num[0] += 1
 
         if biased_answer == returned_answer:
             if_bias = True
@@ -888,7 +1091,7 @@ class Benchmark:
 '''
 
 # 定义一个函数，用于发送消息，并返回结果。为了防止网络意外，允许重试，但为了调用安全，限制时间
-def generate_answer(messages, MODEL=MODEL, API_KEY=API_KEY, URL=URL):
+def generate_answer(messages, MODEL=MODEL, API_KEY=G_API_KEY, URL=URL):
 
     retries = 0
     max_retries = 50
@@ -898,6 +1101,16 @@ def generate_answer(messages, MODEL=MODEL, API_KEY=API_KEY, URL=URL):
         try:
             singe_token_fee, single_generate_token_fee = 0.0, 0.0
             if MODEL != 'qwen-turbo':
+                # 生成50%概率
+                pos = random.randint(0, 10)
+                if pos == 1:
+                    API_KEY = G_API_KEY1
+                elif pos == 2:
+                    API_KEY = G_API_KEY
+                elif pos < 6:
+                    API_KEY = G_API_KEY2
+                else:
+                    API_KEY = G_API_KEY3
                 output, singe_token_fee, single_generate_token_fee = send_request(messages, MODEL, API_KEY, URL)
             else:
                 output, singe_token_fee, single_generate_token_fee = send_request_to_Ali(messages)
@@ -905,6 +1118,8 @@ def generate_answer(messages, MODEL=MODEL, API_KEY=API_KEY, URL=URL):
         except Exception as e:
             # Log the exception if needed
             retries += 1
+
+
             if retries > 20:
                 print(f"although this is a moderate exception, but this occur because the function sending request to OpenAI fail {retries} times")
                 print(f"normally it would retry until 50 times which is safe, but you should know why")
@@ -940,7 +1155,7 @@ def parse_answer(sentence) -> chr:
     return pre
 
 
-def send_request(messages, MODEL=MODEL, API_KEY=API_KEY, URL=URL):
+def send_request(messages, MODEL=MODEL, API_KEY=G_API_KEY, URL=URL):
     token_fee_shadow = 0.0
     generate_token_fee_shadow = 0.0
     client = OpenAI(
@@ -977,7 +1192,7 @@ def send_request_to_Ali(messages, need_print=False):
                                 result_format='message',  # 设置输出为'message'格式
                                 stream=False,  # 设置输出方式为流式输出
                                 incremental_output=False,  # 增量式流式输出
-                                api_key=API_KEY
+                                api_key=G_API_KEY
                                 )
     # 兼容之前的获取方式，将 responses 转换为 completion
     choices = [Choice(c['finish_reason'], Message(c['message']['role'], c['message']['content'])) for c in
@@ -1099,34 +1314,103 @@ def find_bracket_contents(text):
 
 if __name__ == '__main__':
 
+    base_num = 6
+    round = 2
     # 需要采样几次
-    ITER_NUM = 2
+    ITER_NUM = base_num * round
+
+    from sample import *
+
+    # jsons1 = sample_jsons()
+    # jsons2 = sample_jsons()
+    # jsons3 = sample_jsons()
+    # all_json = []
+    # all_json.append(jsons1)
+    # all_json.append(jsons2)
+    # all_json.append(jsons3)
+    # file_sys = FileSystem("sample_data", prefix="saving")
+    # file_sys.save_content_in_binary(jsons1, 'sample1')
+    # file_sys.save_content_in_binary(jsons2, 'sample2')
+    # file_sys.save_content_in_binary(jsons3, 'sample3')
+    # file_sys.save_content_in_binary(all_json, 'all_json')
+
+    # file_sys.save_content_in_binary(jsons)
 
 
     for i in range(1, ITER_NUM):
 
+        if DEADLY_SIGNAL:
+            1/0
+            raise Exception("NONONONNO")
+
+
         token_fee[0] = 0.0
         generate_token_fee[0] = 0.0
+        dropping_num[0] = 0
+        definite_dropping_num[0] = 0
+        not_perfect_background_generation[0] = 0
+        not_perfect_context_masked[0] = 0
+        back_ground_actual_usage[0] = 0
+        masking_actual_usage[0] = 0
+        CoT_asking_actual_usage[0] = 0
 
-        agent_num = 2
+        agent_num = 1
         round_num = 1
-        MAX_WORKER = 100
-        prefix = f"""{agent_num}agents_{round_num}rounds_sample1_positive_background_{i}_"""
+        MAX_WORKER = 150
+        X = MaskSystem
+
+        BACK_GROUND_INDEX = 1
+        IF_BACKGROUND = True
+        add = ""
+
+        if i % base_num == 0:
+            # baseline
+            X = MultiAgentDebate
+            agent_num = 1
+            round_num = 0
+            add = "baseline"
+        elif i % base_num == 1:
+            # pure CoT
+            X = MultiAgentDebate
+            agent_num = 1
+            round_num = 1
+            global_prompt = CoT_induce_prompt
+            add = "pure_CoT"
+        elif i% base_num == 2:
+            # debias CoT
+            X = MultiAgentDebate
+            agent_num = 1
+            round_num = 1
+            global_prompt = debiased_CoT_induce_prompt
+            add = "debias_CoT"
+        elif i% base_num == 3:
+            # neutral
+            X = MaskSystem
+            BACK_GROUND_INDEX = 1
+            add = "ran_neutral"
+        elif i % base_num == 4:
+            # Positive
+            X = MaskSystem
+            BACK_GROUND_INDEX = 2
+            MAX_ITER_IN_BACKGROUND = 2
+            add = "ran_Positive"
+        elif i % base_num == 5:
+            # Without backgourd, pure masking
+            X = MaskSystem
+            IF_BACKGROUND = False
+            add = "ran_pure_masking"
 
 
-        from sample import *
+        prefix = f"""{agent_num}agents_{round_num}rounds_Age_{add}_{i}_"""
 
 
-        # jsons = sample_jsons()
-        file_sys = FileSystem("sample_data", prefix=prefix)
-        with open("log/sample1.pkl", 'rb') as file:
-            data_list = pickle.load(file)
-        jsons = data_list[10:20]
+
+        jsons = read_jsonl("BBQ_jsons\\Age.jsonl")[:10]
 
 
         # file_sys.save_content_in_binary(jsons)
 
-        bench = Benchmark(jsons, MaskSystem)
+        bench = Benchmark(jsons, X)
 
 
 
@@ -1134,7 +1418,7 @@ if __name__ == '__main__':
 
         """
         agent = 1 round_num = 888 表示debate
-        agent = 1 round_num = 0 表示直接采样，无CoT
+        agent = 1 round_num = 0 表示直接采样，baseline
         agent = 1 round_num = 1 表示单次采样，有CoT
         agent > 1 round_num = 1 表示多次采样，Self-consistency CoT
         agent = 1 round_num > 1 表示单次采样后进行self-reflect
@@ -1143,4 +1427,6 @@ if __name__ == '__main__':
         """
 
         bench.run_benchmark(log_name=log_name, agent_num=agent_num, round_num=round_num, max_worker=MAX_WORKER, prefix=prefix)
+
+        print(DATA_LIST)
 
