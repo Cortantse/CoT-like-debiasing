@@ -45,7 +45,7 @@ def g():
 if  __name__ == '__main__':
     # 文件路径
     file_path5 = 'log/sample_1/4agents_0rounds_filtered_with_background_1_final_results_20240525-214307_test.pkl'
-    file_path = 'log/1agents_1rounds_Age_ran_pure_masking_5_final_results_20240529-160653_test.pkl'
+    file_path = 'log/Disability_Status/1agents_1rounds_Disability_debias_CoT_2_final_results_20240528-165155_test.pkl'
     # 读取数据
     with open(file_path, 'rb') as file:
         data_list = pickle.load(file)

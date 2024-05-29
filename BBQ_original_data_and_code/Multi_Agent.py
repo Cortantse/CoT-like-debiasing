@@ -401,6 +401,18 @@ class MaskSystem:
 
         return messages
 
+    def evaluate_masked(self, str) -> float:
+        word_list = [aa, bb]
+        points = 0
+        for word in word_list:
+            count = str.count(word)
+            if count == 1:
+                points += 2
+            elif count >= 2:
+                # 随意设置的
+                points += 2 + (count - 2) * 0.1
+        return points
+
 
     def check_mask_context(self, str, context_list):
         word_list = [aa, bb]
@@ -450,6 +462,8 @@ class MaskSystem:
         context_list = []
 
         for i in range(MAX_ITER_IN_MASK):
+            # 挑选前三个最好的
+            better_list = []
             try:
                 completion, single_token_fee, single_generate_token_fee = generate_answer(messages)
                 token_fee[0] += single_token_fee
@@ -462,8 +476,22 @@ class MaskSystem:
                 copy_context = context.copy()
                 context = context['context_masked']
                 context = str(context)
+
                 if IF_CHECK_IN_MASK:
                     self.check_mask_context(context, context_list)
+
+                # evaluate masked
+                points = self.evaluate_masked(context)
+                if i < 2:
+                    better_list.append((points, context))
+                    continue
+                better_list.append((points, context))
+                # giving the best points one
+                max = -1
+                for i in range(better_list):
+                    if better_list[i][0] > max:
+                        context = better_list[i][1]
+                        max = better_list[i][0]
 
                 return context
             except Exception as e:
@@ -1548,61 +1576,73 @@ if __name__ == '__main__':
 
         if i % base_num == 0:
             # baseline
-            continue
             X = MultiAgentDebate
             agent_num = 1
             round_num = 0
             add = "baseline"
         elif i % base_num == 1:
             # pure CoT
-            continue
             X = MultiAgentDebate
             agent_num = 1
             round_num = 1
-            global_prompt = r
+            global_prompt = CoT_induce_prompt
 
             add = "pure_CoT"
         elif i% base_num == 2:
             # debias CoT
-            continue
             X = MultiAgentDebate
             agent_num = 1
             round_num = 1
+            global_prompt = debiased_CoT_induce_prompt_our
 
             add = "debias_CoT"
         elif i% base_num == 3:
+
+            REVERSE_X_Y = False
+
             # neutral
-            REVERSE_X_Y = True
             X = MaskSystem
             BACK_GROUND_INDEX = 1
             add = "ran_neutral"
         elif i % base_num == 4:
+
+            REVERSE_X_Y = False
+
             # Positive
             X = MaskSystem
-            REVERSE_X_Y = True
             BACK_GROUND_INDEX = 2
             MAX_ITER_IN_BACKGROUND = 2
             add = "ran_Positive"
         elif i % base_num == 5:
+
+            REVERSE_X_Y = False
+
             # Without backgourd, pure masking
-            REVERSE_X_Y = True
             X = MaskSystem
             IF_BACKGROUND = False
             add = "ran_pure_masking"
         elif i % base_num == 6:
+
+            REVERSE_X_Y = False
+
             X = MaskSystem
-            REVERSE_X_Y = True
             BACK_GROUND_INDEX = 3
             MAX_ITER_IN_BACKGROUND = 2
             IF_COUNTERFACT = True
             add = "ran_counterfactual"
         elif i % base_num == 7:
-            continue
+            # continue
+            # X = MaskSystem
+            # BACK_GROUND_INDEX = 3
+            # MAX_ITER_IN_BACKGROUND = 2
+            # IF_COUNTERFACT = False
+            # add = "ran_positive_unfair"
             X = MaskSystem
-            BACK_GROUND_INDEX = 3
-            MAX_ITER_IN_BACKGROUND = 2
-            IF_COUNTERFACT = False
-            add = "ran_positive_unfair"
+            # Without backgourd, pure masking
+            X = MaskSystem
+            IF_BACKGROUND = False
+            REVERSE_X_Y = True
+            add = "ran_pure_masking_YX"
 
 
 
@@ -1630,7 +1670,7 @@ if __name__ == '__main__':
             X = MultiAgentDebate
         except Exception as e:
             if i % base_num >= 3:
-                raise Exception('end')
+                print("warning, using high-cost methods")
             extra_jsons = None
             print(e)
 
