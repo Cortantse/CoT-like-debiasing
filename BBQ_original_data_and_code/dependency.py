@@ -231,7 +231,7 @@ def construct_assistant_message(completion):
 '''
 class FileSystem:
 
-    def __init__(self, file_name: str, prefix: str):
+    def __init__(self, file_name: str, prefix: str= ""):
         timestr = time.strftime("%Y%m%d-%H%M%S")
         self.file_name = timestr + "_" + file_name
         self.prefix = prefix

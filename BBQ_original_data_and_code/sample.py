@@ -61,6 +61,17 @@ def sample_jsons():
 
     return sampled_jsons
 
+def a():
+    aa = 5
+    print(aa)
+
+
 
 if  __name__ == '__main__':
-    pass
+    from prompts import *
+
+
+    print(aa)
+    a()
+    aa = 4
+    print(aa)

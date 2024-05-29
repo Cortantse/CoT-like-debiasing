@@ -67,7 +67,15 @@ def add_positive_word(original_word, positive_word):
 
 
 if __name__ == '__main__':
-    # 测试函数
-    # 测试函数
-    print(add_positive_word("the quick brown fox", "sad"))  # "the happy quick brown fox"
-    print(add_positive_word("  quick brown fox", "sad"))
+
+
+    from
+
+
+
+
+
+
+
+
+
