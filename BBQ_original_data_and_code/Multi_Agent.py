@@ -1405,7 +1405,7 @@ if __name__ == '__main__':
 
 
 
-        jsons = read_jsonl("BBQ_jsons\\Age.jsonl")[:10]
+        jsons = read_jsonl("BBQ_jsons\\Age.jsonl")
 
 
         # file_sys.save_content_in_binary(jsons)
