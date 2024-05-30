@@ -255,7 +255,7 @@ class FileSystem:
     # 存取bias值
     def save_bias_score(self, outcome: dict):
         # 确保日志目录存在
-        log_dir = os.path.join(os.getcwd(), 'log')
+        log_dir = os.path.join(os.getcwd(), 'logg')
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
 

@@ -39,10 +39,10 @@ G_API_KEY3 = "sk-RoziyF8JGv7zWBTPF0D52a83921b494e9c6bB035Ed5249Ca"
 
 TEMPERATURE = 0
 
-MAX_ITER_IN_MASK = 8
-MAX_ITER_IN_ANSWER = 3
-MAX_ITER_IN_BACKGROUND = 2
-MAX_ITER_IN_MULTI_AGENT = 3
+MAX_ITER_IN_MASK = 5
+MAX_ITER_IN_ANSWER = 6
+MAX_ITER_IN_BACKGROUND = 5
+MAX_ITER_IN_MULTI_AGENT = 5
 
 IF_MASK = True
 IF_BACKGROUND = True
@@ -55,8 +55,17 @@ IF_COUNTERFACT = True
 
 REVERSE_X_Y = False
 
+global_prompt = ""
+
+
+def change():
+    prompts.global_prompt = 1
+
+
 if __name__ == '__main__':
-    pass
+    import prompts
+    change()
+    print(prompts.global_prompt)
 
 
 
