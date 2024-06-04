@@ -1,4 +1,5 @@
 import json
+import random
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -211,7 +212,7 @@ class Benchmark:
 
         return returned_answers
 
-    def run_benchmark(self, if_need_masked_context = False, if_need_background = False, max_worker = 50):
+    def run_benchmark(self, if_need_masked_context = False, if_need_background = False, max_worker = 50, prefix = ''):
         returned_answers = self.run_answer_concurrently(if_need_masked_context, if_need_background, max_worker)
         meaningful_num, biased_num = 0, 0
 
@@ -240,7 +241,7 @@ class Benchmark:
 
         # 保存数据
         from dependency import FileSystem
-        f = FileSystem('stereoset_result')
+        f = FileSystem('stereoset_result', prefix)
 
         saving = []
         for item in returned_answers:
@@ -269,8 +270,12 @@ if __name__ == '__main__':
     data = json.load(big_json)
     big_json.close()
 
-    benchmark = Benchmark(data['data']['intrasentence'][:2], debiased_CoT_induce_prompt_our, True)
-    benchmark.run_benchmark(False, False, 50)
+    benchmark = Benchmark(data['data']['intrasentence'], debiased_CoT_induce_prompt_our, True)
+    # benchmark.run_benchmark(False, False, 50)
+
+    for i in range(10):
+        random_index = random.randint(0, len(benchmark.constructed_question) - 1)
+        print(benchmark.constructed_question[random_index])
 
 
     # index = 11
