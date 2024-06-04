@@ -1811,7 +1811,7 @@ if __name__ == '__main__':
 
     # 注意denpendency保存位置
     start(2, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 3,  -1,False, "gpt")
-    start(2, 1, True, 'Sexual_orientation', 'Sexual_orientation', max_worker, 3, -1, False, "gpt")
+    start(2, 1, True, 'Sexual_orientation', 'Sexual_orientation.jsonl', max_worker, 3, -1, False, "gpt")
     start(2, 1, True, 'Age', 'Age.jsonl', max_worker, 3,  -1,False, "gpt")
     start(2, 1, True, 'Disability_status', 'Disability_status.jsonl', max_worker, 3,  -1,False, "gpt")
     start(2, 1, True, 'Nationality', 'Nationality.jsonl', max_worker, 3,  -1,False, "gpt")

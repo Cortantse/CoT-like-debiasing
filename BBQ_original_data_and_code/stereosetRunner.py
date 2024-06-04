@@ -53,6 +53,9 @@ class Benchmark:
         self.data = data
         self.constructed_question = self.constuct_question(technique_prompt, if_intra)
 
+    def initialize_masking_context(self) -> []:
+        pass
+
     def transfer_label(self, label):
         if label == 'stereotype':
             return 1
@@ -115,10 +118,10 @@ class Benchmark:
     def give_masked_context(self, unmasked_context):
         pass
 
-    def give_background(self, unmasked_context, masked_context):
+    def give_background(self, unmasked_context, masked_context, background_type):
         pass
 
-    def run_single_question(self, question_index, if_need_masked_context, if_need_background, status_array, returned_answers):
+    def run_single_question(self, question_index, if_need_masked_context, if_need_background, status_array, returned_answers, background_type):
         pre_processed = self.constructed_question[question_index]['question']
         real_answer = self.constructed_question[question_index]['answer']
         background, masked_context = '', ''
@@ -137,7 +140,7 @@ class Benchmark:
 
         try:
             if if_need_background:
-                background = self.give_background(pre_processed, masked_context)
+                background = self.give_background(pre_processed, masked_context, background_type)
         except:
             background = ''
             imperfect_background[0] += 1
@@ -181,7 +184,7 @@ class Benchmark:
 
 
 
-    def run_answer_concurrently(self, if_need_masked_context, if_need_background, max_worker):
+    def run_answer_concurrently(self, if_need_masked_context, if_need_background, max_worker, background_type):
 
         num_of_jsons = len(self.constructed_question)
 
@@ -202,7 +205,7 @@ class Benchmark:
 
         # 使用线程池来运行任务
         with ThreadPoolExecutor(max_workers=max_worker) as executor:
-            futures = [executor.submit(self.run_single_question, i, if_need_masked_context, if_need_background, status_array, returned_answers) for i in range(num_of_jsons)]
+            futures = [executor.submit(self.run_single_question, i, if_need_masked_context, if_need_background, status_array, returned_answers, background_type) for i in range(num_of_jsons)]
 
         # 等待进度条线程结束
         bar_thread.join()
@@ -212,8 +215,8 @@ class Benchmark:
 
         return returned_answers
 
-    def run_benchmark(self, if_need_masked_context = False, if_need_background = False, max_worker = 50, prefix = ''):
-        returned_answers = self.run_answer_concurrently(if_need_masked_context, if_need_background, max_worker)
+    def run_benchmark(self, if_need_masked_context = False, if_need_background = False, max_worker = 50, prefix = '', background_type = 1):
+        returned_answers = self.run_answer_concurrently(if_need_masked_context, if_need_background, max_worker, background_type)
         meaningful_num, biased_num = 0, 0
 
         sum = len(self.constructed_question)

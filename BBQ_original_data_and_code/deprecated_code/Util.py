@@ -370,13 +370,23 @@ samples_template_age = {
 }
 
 
-
+samples_template_gender_identity = {
+    # 把模板打出来就好，不需要有数据
+    'Baseline': np.array([[0.1301128349788435, 0.8653032440056417, 0.42348377997179126]]),
+    'Anti-Bias CoT': np.array([[0.09203102961918198, 0.49823695345557123, 0.9199576868829337]]),
+    'Pure CoT': np.array([[0.10366713681241187, 0.866361071932299, 0.8730606488011283]]),
+    'random shot | plain text | with neutral background': np.array([[0.09848217437345569, 0.8808180535966149, 0.7850335333568655]]),
+    'random shot | plain text | with positive background': np.array([[0.0942131263232181, 0.8325105782792666, 0.888849682427664]]),
+    'random shot | without background': np.array([[0.0823903818953324, 0.863091037402964, 0.8384016973125884]]),
+    'random shot | plain text |counterfactual': np.array([[0.04165195905400637, 0.8215796897038082, 0.5848923402753265]]),
+    'random shot | without background YX': np.array([[0.08309659090909093, 0.8416784203102962, 0.8579545454545454]])
+}
 
 
 if __name__ == '__main__':
 
-    samples = samples_template_sexual_oritentation
-    data_set_name = 'sexual_orientation'
+    samples = samples_template_gender_identity
+    data_set_name = 'gender_identity'
 
     if_only_need_central_point = False
 
