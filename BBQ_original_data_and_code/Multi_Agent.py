@@ -1363,11 +1363,18 @@ def generate_answer(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=
                 #     API_KEY = config.G_API_KEY3
 
                 URL = 'https://api.cpdd666.cn/v1'
-                pos = random.randint(0, 1)
+                pos = random.randint(0, 4)
                 if pos == 0:
                     API_KEY = 'sk-D6hJPt92vLvCzK5zA630C2153a154d9dA6A3Ca9dC55aE357'
-                else:
+                elif pos == 1:
                     API_KEY = 'sk-YWQxnxXORfx5Q792E4C3Db14E75347DbA4Ad1bD58021Ac47'
+                elif pos == 2:
+                    API_KEY = 'sk-8UaOPLahOU8XYqcj32889dCa09E643BbA35cB653517eD75a'
+                elif pos == 3:
+                    API_KEY = 'sk-PzgMMyEGYnUrzsuOA37e9b21Ac2e466c87D1C2058aD79b29'
+                else:
+                    API_KEY = 'sk-0gvNMVMDyMP6onLp2f0953416fAd423bB0Ef50627cF1E89c'
+
 
 
 
@@ -1770,6 +1777,7 @@ def start(start_idx: int, rounds: int, if_generate: bool, name: str, jsons_name:
     print(DATA_LIST)
 
 
+
 def read_mask(file_path: str):
     jsons = []
     with open(file_path, 'rb') as file:
@@ -1800,25 +1808,29 @@ if __name__ == '__main__':
     need_print_background = False
 
     # 读取以前的background
-    read_mask('log\\1agents_1rounds_gpt_Gender_identity_ran_pure_masking_3_final_results_20240604-151219_test.pkl')
-    NO_MASKING = True
-    print(len(MASKING_CONTEXT))
+    # read_mask('log\\1agents_1rounds_gpt_Gender_identity_ran_pure_masking_3_final_results_20240604-151219_test.pkl')
+    # NO_MASKING = True
+    # print(len(MASKING_CONTEXT))
 
-    max_worker = 150
+    max_worker = 200
 
     threads = []
 
 
     # 注意denpendency保存位置
-    start(2, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 3,  -1,False, "gpt")
-    start(2, 1, True, 'Sexual_orientation', 'Sexual_orientation.jsonl', max_worker, 3, -1, False, "gpt")
-    start(2, 1, True, 'Age', 'Age.jsonl', max_worker, 3,  -1,False, "gpt")
-    start(2, 1, True, 'Disability_status', 'Disability_status.jsonl', max_worker, 3,  -1,False, "gpt")
-    start(2, 1, True, 'Nationality', 'Nationality.jsonl', max_worker, 3,  -1,False, "gpt")
-    start(2, 1, True, 'Physical_appearance', 'Physical_appearance.jsonl', max_worker, 3, -1, False, "gpt")
-    start(2, 1, True, 'Race_ethnicity', 'Race_ethnicity.jsonl', max_worker, 3, -1, False, "gpt")
-    start(2, 1, True, 'Religion', 'Religion.jsonl', max_worker, 3, -1, False, "gpt")
-    start(2, 1, True, 'SES', 'SES.jsonl', max_worker, 3, -1, False, "gpt")
+    # start(2, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 3,  -1,False, "gpt")
+    # start(2, 1, True, 'Sexual_orientation', 'Sexual_orientation.jsonl', max_worker, 3, -1, False, "gpt")
+    # start(2, 1, True, 'Age', 'Age.jsonl', max_worker, 3,  -1,False, "gpt")
+    start(3, 1, True, 'Disability_status', 'Disability_status.jsonl', max_worker, 8,  -1,False, "gpt")
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(3, 1, True, 'Nationality', 'Nationality.jsonl', max_worker, 8,  -1,False, "gpt")
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(3, 1, True, 'Physical_appearance', 'Physical_appearance.jsonl', max_worker, 8, -1, False, "gpt")
+    # start(2, 1, True, 'Race_ethnicity', 'Race_ethnicity.jsonl', max_worker, 3, -1, False, "gpt")
+    # start(2, 1, True, 'Religion', 'Religion.jsonl', max_worker, 3, -1, False, "gpt")
+    # start(2, 1, True, 'SES', 'SES.jsonl', max_worker, 3, -1, False, "gpt")
 
 
 

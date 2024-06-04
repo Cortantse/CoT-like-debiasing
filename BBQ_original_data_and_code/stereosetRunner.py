@@ -26,6 +26,8 @@ imperfect_mask = [0]
 imperfect_background = [0]
 MASKING_CONTEXT = {}
 actual_asking_for_answer = [0]
+
+masking_actual_usage = [0]
 '''
 structure of the json file
 {'id': 'e0c0ef99f05974ad0d9dc292f59e3149', 'target': 'Turkey', 'bias_type': 'race',
@@ -53,8 +55,16 @@ class Benchmark:
         self.data = data
         self.constructed_question = self.constuct_question(technique_prompt, if_intra)
 
-    def initialize_masking_context(self) -> []:
-        pass
+    def initialize_masking_context(self, unmasked_context) -> []:
+        messages = []
+
+
+
+        asking = mask_asking_stereoset.copy()
+        asking['content'] = unmasked_context
+        messages.append({'role': 'user', 'content': json.dumps(asking)})
+
+        return messages
 
     def transfer_label(self, label):
         if label == 'stereotype':
@@ -116,7 +126,82 @@ class Benchmark:
         return constructed_question
 
     def give_masked_context(self, unmasked_context):
-        pass
+        messages = self.initialize_masking_context(unmasked_context)
+
+        # 下面询问masking
+        messages.append({'role': 'user', 'content': "You must output in the json format."})
+
+        # 用于保存没有完全合格的答案
+        context_list = []
+
+        for i in range(config.MAX_ITER_IN_MASK):
+
+            try:
+                completion, single_token_fee, single_generate_token_fee = generate_answer(messages)
+                token_fee[0] += single_token_fee
+                generate_token_fee[0] += single_generate_token_fee
+                context = completion.choices[0].message.content
+
+                masking_actual_usage[0] += 1
+                context = self.pre_process_json(context)
+                context = json.loads(context)
+                copy_context = context.copy()
+                context = context['context_masked']
+                context = str(context)
+
+                if config.IF_CHECK_IN_MASK:
+                    self.check_mask_context(context, context_list)
+                    # XX YY, XXXXXXXXXX, YYYYYYYYYY
+
+                # 先至少迭代三次，没到就保存后重新，保存函数在check_mask_context里
+                if i < 2:
+                    if need_print_mask:
+                        print(context)
+                    continue
+
+                # 获得分数最大的10 20
+                max = -1
+                for item in context_list:  # (points, masked_context)
+                    if item[0] > max:
+                        # 0为分数，1为内容
+                        context = item[1]
+                        max = item[0]
+                if need_print_mask:
+                    print("-------------------final--------------")
+                    print(context)
+                    print('-----------------ori----------------')
+                    print(question)
+
+                return context
+            except Exception as e:
+                # this problem in benign, ignore and retry
+                time.sleep(5)
+                # 保存失败的信息总和
+                failure_data.append({'role': 'assistant', 'content': completion.choices[0].message.content})
+                continue
+
+        # 到这一块说明前面迭代次数耗尽了，还是无法获得X,Y >2的，那么会尽量选取XY最多的
+        # choose as many points as possible
+        max_points, max_index = 0, -1
+
+        for i, item in enumerate(context_list):
+
+            if item[0] > max_points:
+                max_points = item[0]
+                max_index = i
+
+        if max_index == -1:
+            bad_masking[0] += 1
+            print(context_list)
+            return context_list[0][1]
+
+        not_perfect_context_masked[0] += 1
+
+        # 没有合格样本，可能因为没有按照[A] [B] [C]
+        if len(context_list) == 0:
+            print("this is severe because masking fails despite so many times")
+
+        return context_list[max_index][1]
 
     def give_background(self, unmasked_context, masked_context, background_type):
         pass
@@ -253,7 +338,7 @@ class Benchmark:
 
         f.save_content_in_binary(saving)
 
-        tem = {'ss': ss, 'lms': lms, 'icat': icat, 'token_fee': token_fee[0], 'generate_token_fee': generate_token_fee[0], 'dropping_num': dropping_num[0], 'imperfect_mask': imperfect_mask[0], 'imperfect_background': imperfect_background[0], 'actual_asking_for_answer': actual_asking_for_answer[0]}
+        tem = {'ss': ss, 'lms': lms, 'icat': icat, 'token_fee': token_fee[0], 'generate_token_fee': generate_token_fee[0], 'dropping_num': dropping_num[0], 'imperfect_mask': imperfect_mask[0], 'imperfect_background': imperfect_background[0], 'actual_asking_for_answer': actual_asking_for_answer[0], 'Masking_actual_usage': masking_actual_usage[0]}
 
         f.save_bias_score(tem)
 
