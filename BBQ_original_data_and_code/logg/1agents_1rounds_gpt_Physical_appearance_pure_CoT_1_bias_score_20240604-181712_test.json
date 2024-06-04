@@ -1,0 +1,18 @@
+{
+    "acc_in_ambig": 0.7944162436548223,
+    "bias_score_in_ambig": 0.04822335025380709,
+    "acc_in_disambig": 0.7461928934010152,
+    "bias_score_in_disambig": 0.03884892086330938,
+    "token_fee": "0.4985159999999996",
+    "generate_token_fee": "0.14352399999999965",
+    "dropping_num": 0,
+    "iter_time": 0,
+    "not_perfect_num_in_mask": 0,
+    "not_perfect_num_in_background": 0,
+    "ensured_dropping num": 0,
+    "acutal_usage_in_mask": 0,
+    "acutal_usage_in_background": 0,
+    "CoT_actual_usage": 1674,
+    "bad_masking": 0,
+    "bad_background": 0
+}

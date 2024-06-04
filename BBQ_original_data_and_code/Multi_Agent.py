@@ -50,10 +50,13 @@ back_ground_actual_usage = [0]
 CoT_asking_actual_usage = [0]
 
 DATA_LIST = []
+MASKING_CONTEXT = {}
+MASKING_NUM = [0]
 DEADLY_SIGNAL = False
 need_print_mask = False
 
 need_print_background = False
+NO_MASKING = False
 
 
 
@@ -755,7 +758,18 @@ class MaskSystem:
         # 获得mask context，如果失败那么放弃，获得未遮盖
         try:
             if config.IF_MASK:
-                context_without_social_group = self.give_mask_context(question, json_data, failure_data)
+                # 如果有masking信息，则直接读取
+                if MASKING_CONTEXT.get(json_data['example_id']) != None:
+                    context_without_social_group = MASKING_CONTEXT[json_data['example_id']]
+
+                else:
+                    MASKING_NUM[0] += 1
+                    if NO_MASKING:
+                        print('this might be abnormal, meaning this method is not using previous masked context')
+                        print(f"actual_need_of_masked - actual_usage_of_masked = {MASKING_NUM[0]}")
+                    context_without_social_group = self.give_mask_context(question, json_data, failure_data)
+                    MASKING_CONTEXT[json_data['example_id']] = context_without_social_group
+
         except Exception as e:
             bad_masking[0] += 1
             print("masking fails at several times because of")
@@ -1000,8 +1014,8 @@ class MultiAgentDebate:
                     answer = parse_answer(content)
                     agent_contexts[0].append(assistant_message)
                 except Exception as e:
-                    print(e)
-                    print(content)
+                    # print(e)
+                    # print(content)
                     continue
 
                 return {'agent_contexts': agent_contexts, 'text_answer': answer}
@@ -1152,6 +1166,8 @@ class Benchmark:
 
         # returned_answers 理论上已经被multi-agent系统处理过了
         returned_answers = [{'empty': 'empty'}] * num_of_jsons
+
+        MASKING_NUM[0] = 0
 
         # 并发检测表
         threads = []
@@ -1325,7 +1341,7 @@ class Benchmark:
 def generate_answer(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=config.URL):
 
     retries = 0
-    max_retries = 50
+    max_retries = 1000000
     output = ""
 
     while retries < max_retries:
@@ -1333,9 +1349,9 @@ def generate_answer(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=
             singe_token_fee, single_generate_token_fee = 0.0, 0.0
             if MODEL != 'qwen-turbo':
                 # 生成50%概率
-                MODEL = 'deepseek-chat'
-                URL = config.URL_deepseek
-                pos = random.randint(0, 5)
+                # MODEL = 'deepseek-chat'
+                # URL = config.URL_deepseek
+                # pos = random.randint(0, 5)
                 # pos = random.randint(0, 3)
                 # if pos == 0:
                 #     API_KEY = config.G_API_KEY
@@ -1345,12 +1361,31 @@ def generate_answer(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=
                 #     API_KEY = config.G_API_KEY2
                 # else:
                 #     API_KEY = config.G_API_KEY3
-                if pos < 2:
-                    API_KEY = config.API_KEY_deepseek
-                elif pos < 4:
-                    API_KEY = "sk-2c568622b04846c6a74d100dcb7879b3"
+
+                URL = 'https://api.cpdd666.cn/v1'
+                pos = random.randint(0, 1)
+                if pos == 0:
+                    API_KEY = 'sk-D6hJPt92vLvCzK5zA630C2153a154d9dA6A3Ca9dC55aE357'
                 else:
-                    API_KEY = "sk-d57bbec140b5449484c6a6de87eff614"
+                    API_KEY = 'sk-YWQxnxXORfx5Q792E4C3Db14E75347DbA4Ad1bD58021Ac47'
+
+
+
+                # # fast api
+                # pos = random.randint(0, 24)
+                # if pos == 0:
+                #     API_KEY = 'sk-JfNgz8OGYdKCIjGZ12FfEb4e6cB84a3bBdD7F56500EfD3B3'
+                # else:
+                #     API_KEY = 'sk-NVIoJ1hQzPnoppWoDd076652884445CbA354817427E07559'
+
+
+
+                # if pos < 2:
+                #     API_KEY = config.API_KEY_deepseek
+                # elif pos < 4:
+                #     API_KEY = "sk-2c568622b04846c6a74d100dcb7879b3"
+                # else:
+                #     API_KEY = "sk-d57bbec140b5449484c6a6de87eff614"
 
 
                 output, singe_token_fee, single_generate_token_fee = send_request(messages, MODEL, API_KEY, URL)
@@ -1557,7 +1592,7 @@ def find_bracket_contents(text):
 def start(start_idx: int, rounds: int, if_generate: bool, name: str, jsons_name: str, max_worker: int, base_num, test_num = -1, skipping_baseline = False, model_name = ""):
     # rounds indicates generate num
     DEADLY_SIGNAL = False
-    DATA_LIST = []
+
 
 
     for i in range(start_idx, base_num * rounds):
@@ -1586,6 +1621,7 @@ def start(start_idx: int, rounds: int, if_generate: bool, name: str, jsons_name:
         config.BACK_GROUND_INDEX = 1
         config.IF_BACKGROUND = True
         add = ""
+
 
         if i % base_num == 0:
             print("entering baseline")
@@ -1622,6 +1658,7 @@ def start(start_idx: int, rounds: int, if_generate: bool, name: str, jsons_name:
 
             add = "ran_pure_masking"
         elif i % base_num == 4:
+
             print("entering ran_Positive")
             config.REVERSE_X_Y = False
 
@@ -1656,11 +1693,14 @@ def start(start_idx: int, rounds: int, if_generate: bool, name: str, jsons_name:
             # add = "ran_positive_unfair"
             # Without backgourd, pure masking
             X = MaskSystem
-            continue
             config.BACK_GROUND_INDEX = 1
             config.IF_BACKGROUND = False
             config.REVERSE_X_Y = True
             add = "ran_pure_masking_YX"
+        elif i % base_num == 8:
+            # 是否要测试不CoT？
+            continue
+            config.REVERSE_X_Y = False
 
 
         ### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1672,7 +1712,7 @@ def start(start_idx: int, rounds: int, if_generate: bool, name: str, jsons_name:
 
         jsons = read_jsonl(f"BBQ_jsons\\{jsons_name}")
         if test_num != -1:
-            random.shuffle(jsons)
+            # random.shuffle(jsons)
             jsons = jsons[:test_num]
 
         # 这里是获取已有的实验数据
@@ -1727,7 +1767,22 @@ def start(start_idx: int, rounds: int, if_generate: bool, name: str, jsons_name:
     ### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     file_sys = FileSystem(f"data_{name}_Status", prefix="saving")
     file_sys.save_content_in_binary(DATA_LIST)
-    DATA_LIST = []
+    print(DATA_LIST)
+
+
+def read_mask(file_path: str):
+    jsons = []
+    with open(file_path, 'rb') as file:
+        jsons = pickle.load(file)
+
+    for item in jsons:
+        back = item['rationale'][1]['content']
+        back = str(back)
+        back = back.split('\n')
+        back = back[2] + back[3]
+        back = back.split('Let')
+        back = back[0]
+        MASKING_CONTEXT[item['index']] = back
 
 
 
@@ -1744,11 +1799,30 @@ if __name__ == '__main__':
     need_print_mask = False
     need_print_background = False
 
+    # 读取以前的background
+    read_mask('log\\1agents_1rounds_gpt_Gender_identity_ran_pure_masking_3_final_results_20240604-151219_test.pkl')
+    NO_MASKING = True
+    print(len(MASKING_CONTEXT))
+
+    max_worker = 150
+
+    threads = []
+
 
     # 注意denpendency保存位置
-    start(3, 1, True, 'Nationality', 'Nationality.jsonl', 200, 7,  100,False, "d")
+    start(2, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 3,  -1,False, "gpt")
+    start(2, 1, True, 'Sexual_orientation', 'Sexual_orientation', max_worker, 3, -1, False, "gpt")
+    start(2, 1, True, 'Age', 'Age.jsonl', max_worker, 3,  -1,False, "gpt")
+    start(2, 1, True, 'Disability_status', 'Disability_status.jsonl', max_worker, 3,  -1,False, "gpt")
+    start(2, 1, True, 'Nationality', 'Nationality.jsonl', max_worker, 3,  -1,False, "gpt")
+    start(2, 1, True, 'Physical_appearance', 'Physical_appearance.jsonl', max_worker, 3, -1, False, "gpt")
+    start(2, 1, True, 'Race_ethnicity', 'Race_ethnicity.jsonl', max_worker, 3, -1, False, "gpt")
+    start(2, 1, True, 'Religion', 'Religion.jsonl', max_worker, 3, -1, False, "gpt")
+    start(2, 1, True, 'SES', 'SES.jsonl', max_worker, 3, -1, False, "gpt")
+
+
+
     # xuanying 只要跑第 5 方法 ，其它continue
-    start(4, 1, False, 'egrsg', 'ffff',1,7,-1,True, 'esgsge')
     # 1.小规模样本 好的
     # 2.大规模样本 证明
 
