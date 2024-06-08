@@ -8,13 +8,10 @@
 4、获取答案并将其转变为需要的格式
 5、使用数据集比较
 """
-import http
 import random
 import threading
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-import requests
 from dashscope import get_tokenizer  # dashscope版本 >= 1.14.0
 import httpx
 import tiktoken
@@ -22,22 +19,20 @@ import transformers
 import logging
 import pickle
 from dashscope import Generation
-
+import glob
 logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR)
-
-from config import *
 from openai import OpenAI
 from tqdm import tqdm
 from dependency import monitor_progress
 from dependency import read_jsonl
 import dependency as dd
-from prompts import *
 from dependency import construct_question_from_json
 from dependency import FileSystem
 import time
 import config
 import re
 from collections import defaultdict
+from prompts import  *
 
 token_fee = [0.0]
 generate_token_fee = [0.0]
@@ -47,50 +42,21 @@ iter_time = [0]
 dropping_num_due_to_background = [0]
 not_perfect_background_generation = [0]
 definite_dropping_num = [0]
+bad_masking = [0]
+bad_background = [0]
 
 masking_actual_usage = [0]
 back_ground_actual_usage = [0]
 CoT_asking_actual_usage = [0]
 
 DATA_LIST = []
+MASKING_CONTEXT = {}
+MASKING_NUM = [0]
 DEADLY_SIGNAL = False
+need_print_mask = False
 
-global_prompt = ""
-
-
-'''
-定义Agent
-Agent由短期记忆、长期记忆、Tools组成
-
-'''
-class Agent:
-
-    def __init__(self, short_memory, long_memory, tools):
-        self.short_memory = short_memory
-        self.long_memory = long_memory
-        self.tools = tools
-
-    def long_memory_update(self, question):
-        # 将问题输入到Agent中
-        # 更新长期记忆
-        pass
-
-    def use_tools(self, question):
-        # 将问题输入到Agent中
-        # 使用工具
-        pass
-
-    def short_memory_update(self, question):
-        # 将问题输入到Agent中
-        # 更新短期记忆
-        pass
-
-    def give_answer(self, question):
-        # 将问题输入到Agent中
-        # 获取答案
-        # 将答案转变为需要的格式
-        # 返回答案
-        pass
+need_print_background = False
+NO_MASKING = False
 
 
 
@@ -106,10 +72,10 @@ class MaskSystem:
         example1_question['context'] = example1_context
         example1_anwer = {
             "context": example1_context,
-            "task": f"{mask_prompt}",
+            # "task": f"{mask_prompt}",
             "attributes_involved": example1_attributes_involved,
-            "step1": example1_thinking_step1,
-            "step2": example1_thinking_step2,
+            # "step1": example1_thinking_step1,
+            # "step2": example1_thinking_step2,
             "context_masked": example1_context_masked,
         }
 
@@ -117,10 +83,10 @@ class MaskSystem:
         example2_question['context'] = example2_context
         example2_anwer = {
             "context": example2_context,
-            "task": f"{mask_prompt}",
+            # "task": f"{mask_prompt}",
             "attributes_involved": example2_attributes_involved,
-            "step1": example2_thinking_step1,
-            "step2": example2_thinking_step2,
+            # "step1": example2_thinking_step1,
+            # "step2": example2_thinking_step2,
             "context_masked": example2_context_masked,
         }
 
@@ -138,10 +104,10 @@ class MaskSystem:
         example4_question['context'] = example4_context
         example4_anwer = {
             "context": example4_context,
-            "task": f"{mask_prompt}",
+            # "task": f"{mask_prompt}",
             "attributes_involved": example4_attributes_involved,
-            "step1": example4_thinking_step1,
-            "step2": example4_thinking_step2,
+            # "step1": example4_thinking_step1,
+            # "step2": example4_thinking_step2,
             "context_masked": example4_context_masked,
         }
 
@@ -149,10 +115,10 @@ class MaskSystem:
         example6_question['context'] = example6_context
         example6_anwer = {
             "context": example6_context,
-            "task": f"{mask_prompt}",
+            # "task": f"{mask_prompt}",
             "attributes_involved": example6_attributes_involved,
-            "step1": example6_thinking_step1,
-            "step2": example6_thinking_step2,
+            # "step1": example6_thinking_step1,
+            # "step2": example6_thinking_step2,
             "context_masked": example6_context_masked,
         }
 
@@ -160,11 +126,22 @@ class MaskSystem:
         example7_question['context'] = example7_context
         example7_anwer = {
             "context": example7_context,
-            "task": f"{mask_prompt}",
+            # "task": f"{mask_prompt}",
             "attributes_involved": example7_attributes_involved,
-            "step1": example7_thinking_step1,
-            "step2": example7_thinking_step2,
+            # "step1": example7_thinking_step1,
+            # "step2": example7_thinking_step2,
             "context_masked": example7_context_masked,
+        }
+
+        example8_question = mask_asking.copy()
+        example8_question['context'] = example8_context
+        example8_answer = {
+            "context": example8_context,
+            # "task": f"{mask_prompt}",
+            "attributes_involved": example8_attributes_involved,
+            # "step1": example7_thinking_step1,
+            # "step2": example7_thinking_step2,
+            "context_masked": example8_context_masked,
         }
 
         messages_list = []
@@ -173,6 +150,7 @@ class MaskSystem:
         messages_list.append((example4_question, example4_anwer))
         messages_list.append((example6_question, example6_anwer))
         messages_list.append((example7_question, example7_anwer))
+        messages_list.append((example8_question, example8_answer))
 
         random.shuffle(messages_list)
 
@@ -218,37 +196,82 @@ class MaskSystem:
             raise ValueError("Input string is not a valid JSON")
 
         # 连接所有值，并删除符号
-        normalized_text = ' '.join(context_dict.values()).replace('[', '').replace(']', '')
+        normalized_text = ' '.join(context_dict.values()).replace('[', '').replace(']', '').replace("(", "").replace(")", "")
 
         return normalized_text
+
+    def initiate_background_example_counterfactual(self, masked_context, unmasked_context):
+        messages = []
+
+        example1_question = background_asking_counterfactual.copy()
+        example1_question['unmasked_context'] = example1_background_unmasked_context.replace("""\'""", "")
+        example1_question['masked_context'] = example1_background_masked_context.replace("""\'""", "")
+
+        example2_question = background_asking_counterfactual.copy()
+        example2_question['unmasked_context'] = example2_background_unmasked_context.replace("""\'""", "")
+        example2_question['masked_context'] = example2_background_masked_context.replace("""\'""", "")
+
+        example3_question = background_asking_counterfactual.copy()
+        example3_question['unmasked_context'] = example3_background_unmasked_context.replace("""\'""", "")
+        example3_question['masked_context'] = example3_background_masked_context.replace("""\'""", "")
+
+        example4_question = background_asking_counterfactual.copy()
+        example4_question['unmasked_context'] = example4_background_unmasked_context.replace("""\'""", "")
+        example4_question['masked_context'] = example4_background_masked_context.replace("""\'""", "")
+
+
+        example7_question = background_asking_counterfactual.copy()
+        example7_question['unmasked_context'] = example7_background_unmasked_context.replace("""\'""", "")
+        example7_question['masked_context'] = example7_background_masked_context.replace("""\'""", "")
+
+        messages_list = []
+        messages_list.append((example1_question, example1_background_response_counterfactual))
+        messages_list.append((example2_question, example2_background_response_counterfactual))
+        messages_list.append((example3_question, example3_background_response_counterfactual))
+        messages_list.append((example4_question, example4_background_response_counterfactual))
+        messages_list.append((example7_question, example7_background_response_counterfactual))
+
+        random.shuffle(messages_list)
+
+        for item in messages_list:
+            messages.append({'role': 'user', 'content': json.dumps(item[0])})
+            messages.append({'role': 'assistant', 'content': json.dumps(item[1])})
+
+
+        asking_question = background_asking_counterfactual.copy()
+        asking_question['unmasked_context'] = unmasked_context
+        asking_question['masked_context'] = masked_context
+        messages.append({'role': 'user', 'content': json.dumps(asking_question)})
+
+        return messages
 
 
     def initiate_background_example_pure_join(self, masked_context, unmasked_context):
         messages = []
 
         example1_question = background_asking_neutral.copy()
-        example1_question['unmasked_context'] = example1_background_unmasked_context
-        example1_question['masked_context'] =  example1_background_masked_context
+        example1_question['unmasked_context'] = example1_background_unmasked_context.replace("""\'""", "")
+        example1_question['masked_context'] =  example1_background_masked_context.replace("""\'""", "")
 
         example2_question = background_asking_neutral.copy()
-        example2_question['unmasked_context'] = example2_background_unmasked_context
-        example2_question['masked_context'] =  example2_background_masked_context
+        example2_question['unmasked_context'] = example2_background_unmasked_context.replace("""\'""", "")
+        example2_question['masked_context'] =  example2_background_masked_context.replace("""\'""", "")
 
         example3_question = background_asking_neutral.copy()
-        example3_question['unmasked_context'] = example3_background_unmasked_context
-        example3_question['masked_context'] =  example3_background_masked_context
+        example3_question['unmasked_context'] = example3_background_unmasked_context.replace("""\'""", "")
+        example3_question['masked_context'] =  example3_background_masked_context.replace("""\'""", "")
 
         example4_question = background_asking_neutral.copy()
-        example4_question['unmasked_context'] = example4_background_unmasked_context
-        example4_question['masked_context'] =  example4_background_masked_context
+        example4_question['unmasked_context'] = example4_background_unmasked_context.replace("""\'""", "")
+        example4_question['masked_context'] =  example4_background_masked_context.replace("""\'""", "")
 
         example5_question = background_asking_neutral.copy()
-        example5_question['unmasked_context'] = example5_background_unmasked_context
-        example5_question['masked_context'] =  example5_background_masked_context
+        example5_question['unmasked_context'] = example5_background_unmasked_context.replace("""\'""", "")
+        example5_question['masked_context'] =  example5_background_masked_context.replace("""\'""", "")
 
         example6_question = background_asking_neutral.copy()
-        example6_question['unmasked_context'] = example6_background_unmasked_context
-        example6_question['masked_context'] =  example6_background_masked_context
+        example6_question['unmasked_context'] = example6_background_unmasked_context.replace("""\'""", "")
+        example6_question['masked_context'] =  example6_background_masked_context.replace("""\'""", "")
 
 
         messages_list = []
@@ -295,28 +318,28 @@ class MaskSystem:
         messages = []
 
         example1_question = background_asking.copy()
-        example1_question['unmasked_context'] = example1_background_unmasked_context
-        example1_question['masked_context'] =  example1_background_masked_context
+        example1_question['unmasked_context'] = example1_background_unmasked_context.replace("""\'""", "")
+        example1_question['masked_context'] =  example1_background_masked_context.replace("""\'""", "")
 
         example2_question = background_asking.copy()
-        example2_question['unmasked_context'] = example2_background_unmasked_context
-        example2_question['masked_context'] =  example2_background_masked_context
+        example2_question['unmasked_context'] = example2_background_unmasked_context.replace("""\'""", "")
+        example2_question['masked_context'] =  example2_background_masked_context.replace("""\'""", "")
 
         example3_question = background_asking.copy()
-        example3_question['unmasked_context'] = example3_background_unmasked_context
-        example3_question['masked_context'] =  example3_background_masked_context
+        example3_question['unmasked_context'] = example3_background_unmasked_context.replace("""\'""", "")
+        example3_question['masked_context'] =  example3_background_masked_context.replace("""\'""", "")
 
         example4_question = background_asking.copy()
-        example4_question['unmasked_context'] = example4_background_unmasked_context
-        example4_question['masked_context'] =  example4_background_masked_context
+        example4_question['unmasked_context'] = example4_background_unmasked_context.replace("""\'""", "")
+        example4_question['masked_context'] =  example4_background_masked_context.replace("""\'""", "")
 
         example5_question = background_asking.copy()
-        example5_question['unmasked_context'] = example5_background_unmasked_context
-        example5_question['masked_context'] =  example5_background_masked_context
+        example5_question['unmasked_context'] = example5_background_unmasked_context.replace("""\'""", "")
+        example5_question['masked_context'] =  example5_background_masked_context.replace("""\'""", "")
 
         example6_question = background_asking.copy()
-        example6_question['unmasked_context'] = example6_background_unmasked_context
-        example6_question['masked_context'] =  example6_background_masked_context
+        example6_question['unmasked_context'] = example6_background_unmasked_context.replace("""\'""", "")
+        example6_question['masked_context'] =  example6_background_masked_context.replace("""\'""", "")
 
 
         messages_list = []
@@ -328,6 +351,8 @@ class MaskSystem:
         messages_list.append((example6_question, example6_background_response_positive))
 
         random.shuffle(messages_list)
+
+
 
         for item in messages_list:
             messages.append({'role': 'user', 'content': json.dumps(item[0])})
@@ -358,9 +383,21 @@ class MaskSystem:
 
         return messages
 
+    def evaluate_masked(self, str) -> float:
+        word_list = [aa, bb]
+        points = 0
+        for word in word_list:
+            count = str.count(word)
+            if count == 1:
+                points += 2
+            elif count >= 2:
+                # 随意设置的
+                points += 2 + (count - 2) * 0.1
+        return points
+
 
     def check_mask_context(self, str, context_list):
-        word_list = ['X', 'Y']
+        word_list = [aa, bb]
         points = 0
 
         answer_box = ['[A]', '[B]', '[C]']
@@ -374,7 +411,7 @@ class MaskSystem:
                 points += 2
             elif count >= 2:
                 # 随意设置的
-                points += 2 + (count - 2) * 0.1
+                points += 2 + (count - 1) * 0.1
         context_list.append((points, str))
 
         for word in word_list:
@@ -384,6 +421,9 @@ class MaskSystem:
 
     def pre_process_json(self, str, extra_character_num = 0):
         str_new = ""
+
+
+
         for idx, single_char in enumerate(str):
             if single_char == '{':
                 while(str[idx]!='}' or extra_character_num != 0):
@@ -393,6 +433,7 @@ class MaskSystem:
                     idx += 1
                 str_new += '}'
                 return str_new
+        str = str
         return str
 
 
@@ -404,33 +445,56 @@ class MaskSystem:
         # messages.append({'role': 'user', 'content': "You must output in the json format."})
 >>>>>>> Stashed changes
 
+        # 用于保存没有完全合格的答案
         context_list = []
 
-        for i in range(MAX_ITER_IN_MASK):
+        for i in range(config.MAX_ITER_IN_MASK):
+
             try:
                 completion, single_token_fee, single_generate_token_fee = generate_answer(messages)
                 token_fee[0] += single_token_fee
                 generate_token_fee[0] += single_generate_token_fee
                 context = completion.choices[0].message.content
+
                 masking_actual_usage[0] += 1
                 context = self.pre_process_json(context)
                 context = json.loads(context)
                 copy_context = context.copy()
                 context = context['context_masked']
                 context = str(context)
-                if IF_CHECK_IN_MASK:
+
+                if config.IF_CHECK_IN_MASK:
                     self.check_mask_context(context, context_list)
+                    # XX YY, XXXXXXXXXX, YYYYYYYYYY
+
+                # 先至少迭代三次，没到就保存后重新，保存函数在check_mask_context里
+                if i < 2:
+                    if need_print_mask:
+                        print(context)
+                    continue
+
+                # 获得分数最大的10 20
+                max = -1
+                for item in context_list: #(points, masked_context)
+                    if item[0] > max:
+                        # 0为分数，1为内容
+                        context = item[1]
+                        max = item[0]
+                if need_print_mask:
+                    print("-------------------final--------------")
+                    print(context)
+                    print('-----------------ori----------------')
+                    print(question)
 
                 return context
             except Exception as e:
                 # this problem in benign, ignore and retry
                 time.sleep(5)
-                if i > 1 and MODEL == "deepseek-chat":
-                    print("encounting more than 2 times of error in give_mask_context, this is a mild warning for a powerful model like deepseek-chat")
+                # 保存失败的信息总和
                 failure_data.append({'role': 'assistant', 'content': completion.choices[0].message.content})
                 continue
 
-
+        # 到这一块说明前面迭代次数耗尽了，还是无法获得X,Y >2的，那么会尽量选取XY最多的
         # choose as many points as possible
         max_points, max_index = 0, -1
 
@@ -441,15 +505,40 @@ class MaskSystem:
                 max_index = i
 
         if max_index == -1:
-            dropping_num[0] += 1
+            bad_masking[0] += 1
             print(context_list)
-            raise Exception("do not give a mask context")
+            return context_list[0][1]
 
         not_perfect_context_masked[0] += 1
+
+        # 没有合格样本，可能因为没有按照[A] [B] [C]
+        if len(context_list) == 0:
+            print("this is severe because masking fails despite so many times")
+
         return context_list[max_index][1]
 
+    def check_background_context_counterfactual(self, context, context_list):
+        word_list = [aa, bb]
+
+        for word in word_list:
+            count = context.count(word)
+            if count == 0:
+                raise Exception("no X or Y in the background context")
+
+        # 使用正则表达式匹配所有方括号 [] 中的内容
+        matches = re.findall(r'\[(.*?)\]', context)
+
+        points = len(matches)
+
+        # 如果匹配到的内容少于两个，抛出异常
+        if len(matches) < 2:
+            raise Exception("less than 2 matches in the background context")
+
+
+
+
     def check_background_context_positive(self, context, context_list):
-        word_list = ['X', 'Y']
+        word_list = [aa, bb]
 
         for word in word_list:
             count = context.count(word)
@@ -495,7 +584,7 @@ class MaskSystem:
                 raise Exception("uncohersive matches in the background context")
 
     def check_background_context_neutral(self, context, context_list):
-        word_list = ['X', 'Y']
+        word_list = [aa, bb]
         points = 0
 
         for word in word_list:
@@ -510,15 +599,38 @@ class MaskSystem:
             # 1 + 0.1 + 1 + 0.1 = 2.2
             raise Exception(f"points should be 2 in the background context, now points {points}")
 
+    def counterfactual_function(self, text: str) -> str:
+        # 使用正则表达式查找所有方括号内的内容
+        matches = re.findall(r'\[([^]]*)\]', text)
+
+        # 确保恰好找到两个匹配项
+        if len(matches) != 2:
+            raise ValueError("Text must contain exactly two sets of brackets.")
+
+        # 替换第一个和第二个方括号内容
+        # 生成新的文本，其中第一和第二个方括号内的文本互换
+        # 注意使用re.sub时的计数器，以确保只替换相应的部分
+        def replace(match):
+            # 用来交换顺序的临时变量
+            current = replace.counter
+            replace.counter += 1
+            return f'[{matches[1 - current]}]'
+
+        replace.counter = 0
+
+        # 对每一个匹配项进行替换
+        new_text = re.sub(r'\[([^]]*)\]', replace, text, count=2)
+        return new_text
 
 
     def give_back_ground(self, masked_context, unmasked_context, json_data):
-        if BACK_GROUND_INDEX == 1:
+        # 不同background类型消息队列不一样
+        if config.BACK_GROUND_INDEX == 1:
             messages = self.initiate_background_example_pure_join(masked_context=masked_context, unmasked_context=unmasked_context)
-        elif BACK_GROUND_INDEX == 2:
+        elif config.BACK_GROUND_INDEX == 2:
             messages = self.initiate_background_example_positive_join(masked_context=masked_context, unmasked_context=unmasked_context)
-        else:
-            raise Exception("BACK_GROUND_INDEX should be 1 or 2")
+        elif config.BACK_GROUND_INDEX == 3:
+            messages = self.initiate_background_example_counterfactual(masked_context=masked_context, unmasked_context=unmasked_context)
 
 <<<<<<< Updated upstream
         messages.append({'role': 'user', 'content': "You must output in json."})
@@ -528,42 +640,49 @@ class MaskSystem:
         # print(messages)
         context_list = []
 
-        for i in range(MAX_ITER_IN_MASK):
+        for i in range(config.MAX_ITER_IN_MASK):
             try:
                 completion, single_token_fee, single_generate_token_fee = generate_answer(messages)
                 back_ground_actual_usage[0] += 1
                 token_fee[0] += single_token_fee
                 generate_token_fee[0] += single_generate_token_fee
                 context = completion.choices[0].message.content
+
+                #对context进行预处理
                 context = self.pre_process_json(context, 2)
+
+                # 替换单引号，因为可能有格式问题
+                context = context.replace("""\'""", "")
                 context = json.loads(context)
-                # print('*'*20)
-                # print(masked_context)
-                # print('-'*15)
-                # print(unmasked_context)
-                # print('-' * 10)
-                # print(context)
-                # print('-' * 5)
+
                 context = context['formatted_differences_between_masked_and_unmasked']
                 context = str(context)
                 # print(context)
                 # print('*'*20)
-                if BACK_GROUND_INDEX == 2 and IF_CHECK_IN_BACKGROUND:
-                    self.check_background_context_positive(context, context_list)
-                if BACK_GROUND_INDEX == 1 and IF_CHECK_IN_BACKGROUND:
-                    self.check_background_context_neutral(context, context_list)
-                context = self.normalize_context(context)
 
+                #根据不同的background类型选取不同的check方法
+                if config.BACK_GROUND_INDEX == 2 and config.IF_CHECK_IN_BACKGROUND:
+                    self.check_background_context_positive(context, context_list)
+                if config.BACK_GROUND_INDEX == 1 and config.IF_CHECK_IN_BACKGROUND:
+                    self.check_background_context_neutral(context, context_list)
+                if (config.BACK_GROUND_INDEX == 3 ) and config.IF_CHECK_IN_BACKGROUND:
+                    self.check_background_context_counterfactual(context, context_list)
+                    if config.IF_COUNTERFACT:
+                        context = self.counterfactual_function(context)
+
+                if need_print_background:
+                    print(context)
+
+                context = self.normalize_context(context)
 
                 return context
 
             except Exception as e:
                 # this problem in benign, ignore and retry
-                print('='*10)
-                print(f'This data is not good, as {e}')
-                print(context)
                 continue
 
+
+        # 循环次数又耗尽了，
         # choose as many points as possible
         max_points, max_index = 0, -1
 
@@ -577,20 +696,22 @@ class MaskSystem:
             not_perfect_background_generation[0] += 1
             return self.normalize_context(context_list[max_index][1])
 
-        print("do not give a good background")
-        dropping_num[0] += 1
-        if BACK_GROUND_INDEX == 2:
-            dropping_num_due_to_background[0] += 1
-        raise Exception("no good background")
+        if len(context_list) == 0:
+            print("background could not produce any good results")
+
+        bad_background[0] += 1
+        return context_list[0][1]
 
 
-
+    # 唐yi
     def give_answer_without_social_group(self, context_without_social_group, background, json) -> (str, str):
         messages = []
         messages.append({'role': 'user', 'content': background + '' +  context_without_social_group + CoT_induce_prompt})
 
+        # this background isn't important
+
         # 尝试获取答案
-        for i in range(MAX_ITER_IN_ANSWER):
+        for i in range(config.MAX_ITER_IN_ANSWER):
             try:
                 completion, single_token_fee, single_generate_token_fee = generate_answer(messages)
                 token_fee[0] += single_token_fee
@@ -600,9 +721,10 @@ class MaskSystem:
                     parsed_answer = parse_answer(answer)
                 except:
                     # 解析答案失败，要求重新回答
-                    messages.append({'role': 'assistant', 'content': answer})
-                    messages.append({'role': 'user', 'content': format_requirement})
-                    completion, single_token_fee, single_generate_token_fee = generate_answer(messages)
+                    copy_messages = messages.copy()
+                    copy_messages.append({'role': 'assistant', 'content': answer})
+                    copy_messages.append({'role': 'user', 'content': format_requirement})
+                    completion, single_token_fee, single_generate_token_fee = generate_answer(copy_messages)
                     token_fee[0] += single_token_fee
                     generate_token_fee[0] += single_generate_token_fee
                     rationale = answer.copp()
@@ -640,16 +762,42 @@ class MaskSystem:
         contexts.append({'role': 'user', 'content': question})
 
         # 默认已经做过错误处理
+
+        # 获得mask context，如果失败那么放弃，获得未遮盖
         try:
-            if IF_MASK:
-                context_without_social_group = self.give_mask_context(question, json_data, failure_data)
-            if IF_BACKGROUND:
+            if config.IF_MASK:
+                # 如果有masking信息，则直接读取
+                if MASKING_CONTEXT.get(json_data['example_id']) != None:
+                    context_without_social_group = MASKING_CONTEXT[json_data['example_id']]
+
+                else:
+                    MASKING_NUM[0] += 1
+                    if NO_MASKING:
+                        print('this might be abnormal, meaning this method is not using previous masked context')
+                        print(f"actual_need_of_masked - actual_usage_of_masked = {MASKING_NUM[0]}")
+                    context_without_social_group = self.give_mask_context(question, json_data, failure_data)
+                    MASKING_CONTEXT[json_data['example_id']] = context_without_social_group
+
+        except Exception as e:
+            bad_masking[0] += 1
+            print("masking fails at several times because of")
+            print(e)
+            context_without_social_group = question
+        # 获得 background context
+        try:
+            if config.IF_BACKGROUND:
                 background = self.give_back_ground(context_without_social_group ,question, json_data)
+        except Exception as e:
+            bad_background[0] += 1
+            print("background fails at several times becasue of")
+            print(e)
+        # 获得 答案
+        try:
             answer, answer_in_single_letter = self.give_answer_without_social_group(context_without_social_group, background, json_data)
             #processd_answer_later = self.processd_answer_later(question, json_data, answer)
             return {'agent_contexts': self.structure_contexts(contexts, background, context_without_social_group, answer, answer_in_single_letter), 'text_answer': answer_in_single_letter}
         except Exception as e:
-            print("This error should not be reached unless the question is already out of loop, dropping it")
+            print("getting the answer fails in MaskSystem, because of")
             print(e)
             dropping_num[0] +=1
             return {'error': 'error'}
@@ -859,11 +1007,14 @@ class MultiAgentDebate:
         question_prompt = """We seek to find the answer of ""{}"". \n{}""".format(question, CoT_induce_prompt)
 
         # 建造x个agents的消息存储
-        agent_contexts = [[{"role": "user", "content": question + global_prompt }] for agent in range(agents)]
+        agent_contexts = [[{"role": "user", "content": question + config.global_prompt }] for agent in range(agents)]
         # [[{user}{agent1 answer}],
         # [{user}{agent2 answer}]]
 
         # 假设直接得出答案的情况
+
+
+
         if rounds == 0:
             for i in range(3):
                 agent_contexts = [[{"role": "user", "content": question + induce_single_answer}] for agent in range(agents)]
@@ -871,13 +1022,13 @@ class MultiAgentDebate:
                 token_fee[0] += single_token_fee
                 generate_token_fee[0] += single_generate_token_fee
                 assistant_message = dd.construct_assistant_message(completion)
-                agent_contexts[0].append(assistant_message)
                 content = assistant_message['content']
                 try:
                     answer = parse_answer(content)
+                    agent_contexts[0].append(assistant_message)
                 except Exception as e:
-                    print(e)
-                    print(content)
+                    # print(e)
+                    # print(content)
                     continue
 
                 return {'agent_contexts': agent_contexts, 'text_answer': answer}
@@ -896,7 +1047,7 @@ class MultiAgentDebate:
             # 有几个agent就进行几次
             for i, agent_context in enumerate(agent_contexts):
 
-                for _ in range(MAX_ITER_IN_MULTI_AGENT):
+                for _ in range(config.MAX_ITER_IN_MULTI_AGENT):
                     if round != 0:
                         # 创建了一个不包含当前 agent 的上下文信息
                         agent_contexts_other = agent_contexts[:i] + agent_contexts[i + 1:]
@@ -1009,15 +1160,27 @@ class Benchmark:
 
 
     # 获得答案
-    def run_for_answers(self, MultiAgent_class, agent_num, round_num, max_worker, failure_data) -> list:
+    def run_for_answers(self, MultiAgent_class, agent_num, round_num, max_worker, failure_data, extra_jsons = []) -> list:
         # run json question concurrently
         # 将问题并行运行，注意，并发对象是Multi-Agent系统！！！
         # jsons 是原始数据 messages是construct好的问题 returned_answers是返回的答案
+
+        actual_run_jsons = []
+        # 保证实际算得是原数据集合
+        if extra_jsons:
+            for item in extra_jsons:
+                actual_run_jsons.append(self.test_set[item['index']])
+            self.test_set = actual_run_jsons
+
         num_of_jsons = len(self.test_set)
         messages = self.construct_BBQ_message()
+        if extra_jsons:
+            num_of_jsons = len(extra_jsons)
 
         # returned_answers 理论上已经被multi-agent系统处理过了
         returned_answers = [{'empty': 'empty'}] * num_of_jsons
+
+        MASKING_NUM[0] = 0
 
         # 并发检测表
         threads = []
@@ -1029,10 +1192,14 @@ class Benchmark:
         bar_thread.start()
 
         # 定义并发函数 并行运行multi-agent系统， 然后先获得answer 再更新进度条
-        def run_multi_agent_concurrently(question: str, answer_list: list, index: int, status_array: list, failure_data):
+        def run_multi_agent_concurrently(question: str, answer_list: list, index: int, status_array: list, failure_data, extra_jsons):
             multi_agent = MultiAgent_class()
             try:
-                answer_list[index] = multi_agent.give_answer(question, agent_num, round_num, self.test_set[index], failure_data)
+                if not extra_jsons:
+                    answer_list[index] = multi_agent.give_answer(question, agent_num, round_num, self.test_set[index], failure_data)
+                else:
+                    answer_list[index] = multi_agent.give_answer_test(question, agent_num, round_num, self.test_set[index],
+                                                                 failure_data, extra_jsons[index])
 
             except Exception as e:
                 print("Error in multi-agent system, this message comes from the run_multi_agent_concurrently function")
@@ -1043,7 +1210,7 @@ class Benchmark:
 
         # 使用线程池来运行任务
         with ThreadPoolExecutor(max_workers=max_worker) as executor:
-            futures = [executor.submit(run_multi_agent_concurrently, messages[i], returned_answers, i, status_array, failure_data) for i in range(num_of_jsons)]
+            futures = [executor.submit(run_multi_agent_concurrently, messages[i], returned_answers, i, status_array, failure_data, extra_jsons) for i in range(num_of_jsons)]
 
 
         # 等待进度条线程结束
@@ -1051,6 +1218,8 @@ class Benchmark:
 
         # 关闭进度条
         progress_bar.close()
+
+
 
         return returned_answers
 
@@ -1076,7 +1245,7 @@ class Benchmark:
             DATA_LIST.append({'acc_in_ambig': acc_in_ambig, 'bias_score_in_ambig': bias_score_in_ambig,
                 'acc_in_disambig': acc_in_disambig, 'bias_score_in_disambig': bias_score_in_disambig, 'token_fee': str(token_fee[0]) , 'generate_token_fee': str(generate_token_fee[0]) ,
                 'dropping_num': dropping_num[0], 'iter_time': iter_time[0], 'not_perfect_num_in_mask': not_perfect_context_masked[0], 'not_perfect_num_in_background': not_perfect_background_generation[0], 'ensured_dropping num': definite_dropping_num[0],
-                'acutal_usage_in_mask': masking_actual_usage[0], 'acutal_usage_in_background': back_ground_actual_usage[0], 'CoT_actual_usage': CoT_asking_actual_usage[0]}
+                'acutal_usage_in_mask': masking_actual_usage[0], 'acutal_usage_in_background': back_ground_actual_usage[0], 'CoT_actual_usage': CoT_asking_actual_usage[0], 'bad_masking': bad_masking[0], 'bad_background': bad_background[0]}
 )
         except:
             print('not good')
@@ -1084,7 +1253,7 @@ class Benchmark:
         return {'acc_in_ambig': acc_in_ambig, 'bias_score_in_ambig': bias_score_in_ambig,
                 'acc_in_disambig': acc_in_disambig, 'bias_score_in_disambig': bias_score_in_disambig, 'token_fee': str(token_fee[0]) , 'generate_token_fee': str(generate_token_fee[0]) ,
                 'dropping_num': dropping_num[0], 'iter_time': iter_time[0], 'not_perfect_num_in_mask': not_perfect_context_masked[0], 'not_perfect_num_in_background': not_perfect_background_generation[0], 'ensured_dropping num': definite_dropping_num[0],
-                'acutal_usage_in_mask': masking_actual_usage[0], 'acutal_usage_in_background': back_ground_actual_usage[0], 'CoT_actual_usage': CoT_asking_actual_usage[0]}
+                'acutal_usage_in_mask': masking_actual_usage[0], 'acutal_usage_in_background': back_ground_actual_usage[0], 'CoT_actual_usage': CoT_asking_actual_usage[0], 'bad_masking': bad_masking[0], 'bad_background': bad_background[0]}
 
 
 
@@ -1142,13 +1311,14 @@ class Benchmark:
 
 
         return {"index": real_idx, "type": type, "polarity": polarity, "question": QA, "answer": returned_answer,
-                "correct_answer": correct_answer, "if_bias": if_bias, "if_unknown": if_unknown, 'rationale': rationale, 'MODEL': MODEL, 'TEMPERATURE': TEMPERATURE, 'masked_index_dict': masked_index_dict,
-                'MAX_ITER_IN_MASK': MAX_ITER_IN_MASK, 'MAX_ITER_IN_MASK_FOR_ANSWER': MAX_ITER_IN_ANSWER}
+                "correct_answer": correct_answer, "if_bias": if_bias, "if_unknown": if_unknown, 'rationale': rationale, 'MODEL': config.MODEL, 'TEMPERATURE': config.TEMPERATURE, 'masked_index_dict': masked_index_dict,
+                'MAX_ITER_IN_MASK': config.MAX_ITER_IN_MASK, 'MAX_ITER_IN_MASK_FOR_ANSWER': config.MAX_ITER_IN_ANSWER}
+
 
     # 最后自动运行整个benchmark
-    def run_benchmark(self, log_name: str, agent_num, round_num, max_worker, prefix: str = '4agents_3rounds_'):
+    def run_benchmark(self, log_name: str, agent_num, round_num, max_worker, prefix: str = '4agents_3rounds_', extra_jsons = []):
         failure_data = []
-        returned_answers = self.run_for_answers(self.multi_agent_system_class, agent_num, round_num, max_worker, failure_data)
+        returned_answers = self.run_for_answers(self.multi_agent_system_class, agent_num, round_num, max_worker, failure_data, extra_jsons)
         final_results = self.pack_results(returned_answers)
         # 保存计算数据
         file_sys = FileSystem(log_name, prefix=prefix)
@@ -1174,31 +1344,6 @@ class Benchmark:
         # pdb.set_trace()
 
 
-# 重新包装新api
-class Message:
-    def __init__(self, role, content):
-        self.role = role
-        self.content = content
-
-class Choice:
-    def __init__(self, index, message, logprobs, finish_reason):
-        self.index = index
-        self.message = message
-        self.logprobs = logprobs
-        self.finish_reason = finish_reason
-
-class DataWrapper:
-    def __init__(self, data):
-        self.id = data['id']
-        self.object = data['object']
-        self.created = data['created']
-        self.model = data['model']
-        self.choices = [Choice(choice['index'],
-                               Message(choice['message']['role'], choice['message']['content']),
-                               choice.get('logprobs', None),  # using get to handle missing data
-                               choice['finish_reason']) for choice in data['choices']]
-        self.usage = data['usage']
-        self.system_fingerprint = data.get('system_fingerprint')  # using get to handle missing data
 
 
 '''
@@ -1206,10 +1351,10 @@ class DataWrapper:
 '''
 
 # 定义一个函数，用于发送消息，并返回结果。为了防止网络意外，允许重试，但为了调用安全，限制时间
-def generate_answer(messages, MODEL=MODEL, API_KEY=G_API_KEY, URL=URL):
+def generate_answer(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=config.URL):
 
     retries = 0
-    max_retries = 50
+    max_retries = 1000000
     output = ""
 
     while retries < max_retries:
@@ -1285,6 +1430,8 @@ def generate_answer(messages, MODEL=MODEL, API_KEY=G_API_KEY, URL=URL):
         except Exception as e:
             # Log the exception if needed
             retries += 1
+
+
             if retries > 20:
                 print(f"although this is a moderate exception, but this occur because the function sending request to OpenAI fail {retries} times")
                 print(f"normally it would retry until 50 times which is safe, but you should know why")
@@ -1294,7 +1441,7 @@ def generate_answer(messages, MODEL=MODEL, API_KEY=G_API_KEY, URL=URL):
                 print("This message comes from the send_message_safe function")
                 print("This should never happen since loop is so many times")
                 raise Exception("Failed to send message after 2 retries")
-            time.sleep(4)
+            time.sleep(20)
 
 
 
@@ -1310,69 +1457,17 @@ def parse_answer(sentence) -> chr:
     if not results:
         raise ValueError("No valid options found. Options must be one of [A], [B], or [C].")
     # 返回找到的所有匹配结果
-    pre = results[-1]
+    pre = results[0]
+    for item in results:
+        if item[0] != pre:
+            raise ValueError("Options differ in the answer. Options must be one of [A], [B], or [C].")
+        elif item[0] != 'A' and item[0] != 'B' and item[0] != 'C':
+            raise ValueError("Options must be one of [A], [B], or [C].")
 
-    return pre[-1]
-
-
-def send_request_fast_api(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=config.URL):
-    try:
-        conn = http.client.HTTPSConnection("api.chatanywhere.tech")
-        payload = json.dumps({
-            "model": "gpt-3.5-turbo-0125",
-            "messages": messages,
-            "temperature": 0,
-        })
-        headers = {
-            'Authorization': f'Bearer {API_KEY}',
-            'User-Agent': 'Apifox/1.0.0 (https://apifox.com)',
-            'Content-Type': 'application/json'
-        }
-        conn.request("POST", "/v1/chat/completions", payload, headers)
-        res = conn.getresponse()
-        data = res.read()
-        json_data = json.loads(data)
-        return json_data
-    except Exception as e:
-        raise e
+    return pre
 
 
-def send_request_llama(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=config.URL):
-    token_fee_shadow = 0.0
-    generate_token_fee_shadow = 0.0
-    client = OpenAI(
-        base_url="https://integrate.api.nvidia.com/v1",
-        api_key="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"
-    )
-
-    completion = client.chat.completions.create(
-        model="meta/llama3-8b-instruct",
-        messages=messages,
-        temperature=0,
-        top_p=1,
-        max_tokens=1024,
-        stream=False
-    )
-    return completion, token_fee_shadow, generate_token_fee_shadow
-
-
-
-class Message_:
-    def __init__(self, role, content):
-        self.role = role
-        self.content = content
-
-class Choice_:
-    def __init__(self, finish_reason, message):
-        self.finish_reason = finish_reason
-        self.message = message
-
-class Completion_:
-    def __init__(self, choices):
-        self.choices = choices
-
-
-def send_request(messages, MODEL=MODEL, API_KEY=G_API_KEY, URL=URL):
+def send_request(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=config.URL):
     token_fee_shadow = 0.0
     generate_token_fee_shadow = 0.0
     client = OpenAI(
@@ -1386,7 +1481,7 @@ def send_request(messages, MODEL=MODEL, API_KEY=G_API_KEY, URL=URL):
     completion = client.chat.completions.create(
         model=MODEL,
         messages=messages,
-        temperature=TEMPERATURE,
+        temperature=config.TEMPERATURE,
     )
 
     try:
@@ -1434,39 +1529,14 @@ def send_request_to_Ali(messages, need_print=True):
 >>>>>>> Stashed changes
 
     try:
-        # 发送POST请求
-        response = requests.post(url, headers=headers, data=payload)
-        if response.status_code == 200:
-            # 解析JSON数据
-            response_data = response.json()
-            if 'result' in response_data:
-                # 创建Message_实例
-                message_instance = Message_(role="assistant", content=response_data['result'])
-                # 创建Choice_实例
-                choice_instance = Choice_(finish_reason="completed", message=message_instance)
-                # 创建Completion_实例
-                completion_instance = Completion_(choices=[choice_instance])
-
-                if need_print:
-                    print(completion_instance.choices[0].message.content)
-                return completion_instance
-            else:
-                # 检查是否有错误代码和错误消息
-                if 'error_code' in response_data and 'error_msg' in response_data:
-                    raise Exception(f"API Error {response_data['error_code']}: {response_data['error_msg']}")
-        else:
-            # 处理非200状态码
-            raise Exception(f"HTTP Error: {response.status_code} {response.text}")
-    except Exception as e:
-        # 异常处理
-        if need_print:
-            print(f"Error occurred: {e}")
-        raise
-
-    1/0
-
-
-
+        # 计算请求消息的 token 费用
+        input_tokens_fee = sum(count_tokens_fee(msg['content'], if_input = True) for msg in messages)
+        token_fee_shadow += input_tokens_fee  # 更新全局 token 费用
+        token_fee_shadow += count_tokens_fee(completion.choices[0].message.content, if_input = False)
+        generate_token_fee_shadow = count_tokens_fee(completion.choices[0].message.content, if_input = False)
+    except:
+        raise Exception("token_fee error")
+    return completion, token_fee_shadow, generate_token_fee_shadow
 
 
 
@@ -1476,7 +1546,7 @@ def send_request_to_Ali(messages, need_print=True):
 def count_tokens_fee(text, if_input = True) -> float:
 
     # 从 model_dict 字典中，根据 model_version 参数获取相应的语言模型
-    model = MODEL
+    model = config.MODEL
 
     # 使用 tiktoken.encoding_for_model 方法，获取该模型的标记化编码器
     if model == 'gpt-4o':
@@ -1534,6 +1604,20 @@ def return_group_a_and_group_b(json: json):
 
 
 
+# 用于转换
+class Message:
+    def __init__(self, role, content):
+        self.role = role
+        self.content = content
+
+class Choice:
+    def __init__(self, finish_reason, message):
+        self.finish_reason = finish_reason
+        self.message = message
+
+class Completion:
+    def __init__(self, choices):
+        self.choices = choices
 
 def clean_text(text):
     # 去除非字母和非基本标点的字符
@@ -1557,32 +1641,13 @@ def find_bracket_contents(text):
         raise ValueError("There should be exactly one [xxx] format in the text.")
 
 
-if __name__ == '__main__':
-
-    base_num = 6
-    round = 2
-    # 需要采样几次
-    ITER_NUM = base_num * round
-
-    from sample import *
-
-    # jsons1 = sample_jsons()
-    # jsons2 = sample_jsons()
-    # jsons3 = sample_jsons()
-    # all_json = []
-    # all_json.append(jsons1)
-    # all_json.append(jsons2)
-    # all_json.append(jsons3)
-    # file_sys = FileSystem("sample_data", prefix="saving")
-    # file_sys.save_content_in_binary(jsons1, 'sample1')
-    # file_sys.save_content_in_binary(jsons2, 'sample2')
-    # file_sys.save_content_in_binary(jsons3, 'sample3')
-    # file_sys.save_content_in_binary(all_json, 'all_json')
-
-    # file_sys.save_content_in_binary(jsons)
+def start(start_idx: int, rounds: int, if_generate: bool, name: str, jsons_name: str, max_worker: int, base_num, test_num = -1, skipping_baseline = False, model_name = ""):
+    # rounds indicates generate num
+    DEADLY_SIGNAL = False
 
 
-    for i in range(1, ITER_NUM):
+
+    for i in range(start_idx, base_num * rounds):
 
         if DEADLY_SIGNAL:
             1/0
@@ -1598,17 +1663,20 @@ if __name__ == '__main__':
         back_ground_actual_usage[0] = 0
         masking_actual_usage[0] = 0
         CoT_asking_actual_usage[0] = 0
+        bad_masking[0] = 0
 
         agent_num = 1
         round_num = 1
-        MAX_WORKER = 150
+        MAX_WORKER = max_worker
         X = MaskSystem
 
-        BACK_GROUND_INDEX = 1
-        IF_BACKGROUND = True
+        config.BACK_GROUND_INDEX = 1
+        config.IF_BACKGROUND = True
         add = ""
 
+
         if i % base_num == 0:
+            print("entering baseline")
             # baseline
             X = MultiAgentDebate
             agent_num = 1
@@ -1616,48 +1684,119 @@ if __name__ == '__main__':
             add = "baseline"
         elif i % base_num == 1:
             # pure CoT
+            print("entering pure Cot")
             X = MultiAgentDebate
             agent_num = 1
             round_num = 1
-            global_prompt = CoT_induce_prompt
+            config.global_prompt = CoT_induce_prompt
+
             add = "pure_CoT"
         elif i% base_num == 2:
             # debias CoT
+            print("entering debias-CoT")
             X = MultiAgentDebate
             agent_num = 1
             round_num = 1
-            global_prompt = debiased_CoT_induce_prompt
+            config.global_prompt = debiased_CoT_induce_prompt_our
+
             add = "debias_CoT"
         elif i% base_num == 3:
-            # neutral
-            X = MaskSystem
-            BACK_GROUND_INDEX = 1
-            add = "ran_neutral"
-        elif i % base_num == 4:
-            # Positive
-            X = MaskSystem
-            BACK_GROUND_INDEX = 2
-            MAX_ITER_IN_BACKGROUND = 2
-            add = "ran_Positive"
-        elif i % base_num == 5:
+            print("entering ran-pure-masking")
+            config.REVERSE_X_Y = False
+
             # Without backgourd, pure masking
             X = MaskSystem
-            IF_BACKGROUND = False
+            config.IF_BACKGROUND = False
+
             add = "ran_pure_masking"
+        elif i % base_num == 4:
+
+            print("entering ran_Positive")
+            config.REVERSE_X_Y = False
+
+            # Positive
+            X = MaskSystem
+            config.BACK_GROUND_INDEX = 2
+            config.IF_BACKGROUND = True
+            add = "ran_Positive"
+        elif i % base_num == 5:
+            print("entering ran_neutral")
+            config.REVERSE_X_Y = False
+
+            # neutral
+            X = MaskSystem
+            config.BACK_GROUND_INDEX = 1
+            config.IF_BACKGROUND = True
+            add = "ran_neutral"
+        elif i % base_num == 6:
+            print("entering counterfactual")
+            config.REVERSE_X_Y = False
+
+            X = MaskSystem
+            config.BACK_GROUND_INDEX = 3
+            config.IF_BACKGROUND = True
+            add = "ran_counterfactual"
+        elif i % base_num == 7:
+            # continue
+            # X = MaskSystem
+            # BACK_GROUND_INDEX = 3
+            # MAX_ITER_IN_BACKGROUND = 2
+            # IF_COUNTERFACT = False
+            # add = "ran_positive_unfair"
+            # Without backgourd, pure masking
+            X = MaskSystem
+            config.BACK_GROUND_INDEX = 1
+            config.IF_BACKGROUND = False
+            config.REVERSE_X_Y = True
+            add = "ran_pure_masking_YX"
+        elif i % base_num == 8:
+            # 是否要测试不CoT？
+            continue
+            config.REVERSE_X_Y = False
 
 
-        prefix = f"""{agent_num}agents_{round_num}rounds_Age_{add}_{i}_"""
+        ### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        prefix = f"""{agent_num}agents_{round_num}rounds_{model_name}_{name}_{add}_{i}_"""
+        if not if_generate:
+            prefix = f"""copy_{agent_num}agents_{round_num}rounds_{model_name}_{name}_{add}_{i}_"""
 
+        ### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+        jsons = read_jsonl(f"BBQ_jsons\\{jsons_name}")
+        if test_num != -1:
+            # random.shuffle(jsons)
+            jsons = jsons[:test_num]
 
-        jsons = read_jsonl("BBQ_jsons\\Age.jsonl")
+        # 这里是获取已有的实验数据
+        # 定义文件匹配模式，'*' 代表任意多个字符
+        try:
+            ### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            pattern = f'logg\\{name}\\1agents_1rounds_{model_name}_{name}_{add}*final_results_*_test.pkl'
 
+            if skipping_baseline and i % base_num < 3:
+                continue
 
-        # file_sys.save_content_in_binary(jsons)
+            if i % base_num < 3 or if_generate:
+                if not if_generate:
+                    continue
+
+                raise Exception("out")
+
+            # 使用 glob.glob() 查找所有匹配的文件
+            files = glob.glob(pattern)
+
+            with open(files[i // base_num], 'rb') as file:
+                # !!!!!!!
+                extra_jsons = pickle.load(file)
+
+            X = MultiAgentDebate
+        except Exception as e:
+            if i % base_num >= 3:
+                print("warning, using high-cost methods")
+            extra_jsons = None
+            print(e)
 
         bench = Benchmark(jsons, X)
-
-
 
         log_name = 'test'
 
@@ -1670,8 +1809,10 @@ if __name__ == '__main__':
         agent = 2 round_num = 1 表示advice
         agent = 4 round_num = 0 indicates masking strategies
         """
-
-        bench.run_benchmark(log_name=log_name, agent_num=agent_num, round_num=round_num, max_worker=MAX_WORKER, prefix=prefix)
+        try:
+            bench.run_benchmark(log_name=log_name, agent_num=agent_num, round_num=round_num, max_worker=MAX_WORKER, prefix=prefix, extra_jsons=extra_jsons)
+        except:
+            DEADLY_SIGNAL = True
 
         print(DATA_LIST)
 
@@ -1723,7 +1864,7 @@ if __name__ == '__main__':
 
 
     # 注意denpendency保存位置
-    start(0, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 8,  -1,False, "llama3")
+    start(0, 3, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 8,  -1,False, "llama3")
     MASKING_CONTEXT = {}
     MASKING_NUM = {}
     start(0, 1, True, 'Sexual_orientation', 'Sexual_orientation.jsonl', max_worker, 8, -1, False, "llama3")
