@@ -8,10 +8,13 @@
 4、获取答案并将其转变为需要的格式
 5、使用数据集比较
 """
+import http
 import random
 import threading
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+import requests
 from dashscope import get_tokenizer  # dashscope版本 >= 1.14.0
 import httpx
 import tiktoken
@@ -395,7 +398,11 @@ class MaskSystem:
 
     def give_mask_context(self, question, json_data, failure_data: []) -> str:
         messages = self.initiate_mask_example(question)
+<<<<<<< Updated upstream
         messages.append({'role': 'user', 'content': "You must output in json."})
+=======
+        # messages.append({'role': 'user', 'content': "You must output in the json format."})
+>>>>>>> Stashed changes
 
         context_list = []
 
@@ -513,7 +520,11 @@ class MaskSystem:
         else:
             raise Exception("BACK_GROUND_INDEX should be 1 or 2")
 
+<<<<<<< Updated upstream
         messages.append({'role': 'user', 'content': "You must output in json."})
+=======
+        # messages.append({'role': 'user', 'content': JSON_FORMAT})
+>>>>>>> Stashed changes
         # print(messages)
         context_list = []
 
@@ -743,6 +754,85 @@ class MultiAgentDebate:
         return  {'error': 'error'}
 
 
+<<<<<<< Updated upstream
+=======
+    # 用于实验
+    def give_answer_test(self, question, agent_num, round_num, json, failure_data = None, extra_json = None) -> dict:
+        # 这里根据不同想测试的东西配置real_question
+        # 理论上你最多用得到question extra_json
+        # 下面定义一些方法，方便你操作
+        first_character = 'Y'
+        second_character = 'X'
+        real_question = str(extra_json["rationale"][1]["content"])
+        # 现在切分背景和真实问题，方法很简单，切两个\n\n
+        background, masked_question = "", ""
+        real_question = real_question.split("\n\n")
+
+        background = "unimportant background: "
+        background += real_question[0]
+        masked_question = real_question[1]
+
+        # 现在随你玩了，已经分好了
+        # 这部分是用来换符号的
+        def replace_special_characters(text, target, replacement):
+            """
+            在给定文本中查找目标字符串，确保它的前后不接字母，并替换为replacement。
+
+            参数:
+            text (str): 要搜索和替换的文本。
+            target (str): 要查找的目标字符串。
+            replacement (str): 替换为的字符串。
+
+            返回:
+            str: 替换后的文本。
+            """
+            # 使用正则表达式来查找并替换匹配项
+            # 正则表达式解释：
+            # (?<![a-zA-Z]) 表示目标字符串之前不能有字母（lookbehind assertion）
+            # (?![a-zA-Z]) 表示目标字符串之后不能有字母（lookahead assertion）
+            pattern = r'(?<![a-zA-Z])' + re.escape(target) + r'(?![a-zA-Z])'
+            # 替换找到的所有符合条件的target为replacement
+            result_text = re.sub(pattern, replacement, text)
+
+            return result_text
+
+        def replace_original_XY_to_first_character_and_second_character(text, first_character, second_character):
+            text = replace_special_characters(text, 'X', '*')
+            text = replace_special_characters(text, 'Y', second_character)
+            text = replace_special_characters(text, '*', first_character)
+            return text
+
+        background = replace_original_XY_to_first_character_and_second_character(background, first_character, second_character)
+        masked_question = replace_original_XY_to_first_character_and_second_character(masked_question, first_character, second_character)
+
+        # 这部分是用来实验backgournd该插入在哪里以及howhowhowhowhowhow
+
+        real_question = background + "\n\n" + masked_question
+
+        answer_ = []
+        for i in range(3):
+            agent_contexts = [[{"role": "user", "content": real_question}]]
+            completion, single_token_fee, single_generate_token_fee = generate_answer(agent_contexts[0])
+            token_fee[0] += single_token_fee
+            generate_token_fee[0] += single_generate_token_fee
+            CoT_asking_actual_usage [0] += 1
+            assistant_message = dd.construct_assistant_message(completion)
+            content = assistant_message['content']
+            answer_.append(content)
+            try:
+                answer = parse_answer(content)
+                agent_contexts[0].append(assistant_message)
+            except Exception as e:
+                CoT_asking_actual_usage [0] += 1
+                continue
+
+            return {'agent_contexts': agent_contexts, 'text_answer': answer}
+        # fail
+        print(answer_)
+        raise Exception('baseline fail')
+
+
+>>>>>>> Stashed changes
     # 别人的方法
     # 传出一个列表 {agent_contexts: [], text_answer: chr}
     def give_answer(self, question, agent_num, round_num, json, failure_data = None) -> dict:
@@ -1084,6 +1174,31 @@ class Benchmark:
         # pdb.set_trace()
 
 
+# 重新包装新api
+class Message:
+    def __init__(self, role, content):
+        self.role = role
+        self.content = content
+
+class Choice:
+    def __init__(self, index, message, logprobs, finish_reason):
+        self.index = index
+        self.message = message
+        self.logprobs = logprobs
+        self.finish_reason = finish_reason
+
+class DataWrapper:
+    def __init__(self, data):
+        self.id = data['id']
+        self.object = data['object']
+        self.created = data['created']
+        self.model = data['model']
+        self.choices = [Choice(choice['index'],
+                               Message(choice['message']['role'], choice['message']['content']),
+                               choice.get('logprobs', None),  # using get to handle missing data
+                               choice['finish_reason']) for choice in data['choices']]
+        self.usage = data['usage']
+        self.system_fingerprint = data.get('system_fingerprint')  # using get to handle missing data
 
 
 '''
@@ -1100,6 +1215,7 @@ def generate_answer(messages, MODEL=MODEL, API_KEY=G_API_KEY, URL=URL):
     while retries < max_retries:
         try:
             singe_token_fee, single_generate_token_fee = 0.0, 0.0
+<<<<<<< Updated upstream
             if MODEL != 'qwen-turbo':
                 # 生成50%概率
                 pos = random.randint(0, 10)
@@ -1111,6 +1227,57 @@ def generate_answer(messages, MODEL=MODEL, API_KEY=G_API_KEY, URL=URL):
                     API_KEY = G_API_KEY2
                 else:
                     API_KEY = G_API_KEY3
+=======
+            if MODEL == 'llama3-8b-instruct':
+                output= send_request_to_Ali(messages)
+                return output, 0, 0
+            elif MODEL == 'fgpt-3.5-turbo':
+                API_KEY = 'sk-VPXWylHLcryLm4KPe0svfb5pOUyob8sTGUUdruUJ13bxqzRV'
+                output = send_request_fast_api(messages, MODEL, API_KEY, URL)
+                new_output = DataWrapper(output)
+                return new_output, 0, 0
+            elif MODEL != 'qwen-turbo':
+
+                URL = 'https://api.cpdd666.cn/v1'
+                pos = random.randint(0, 9)
+                if pos < 2:
+                    API_KEY = 'sk-4WWcmcFmece9D0jWC9Ca933aE1A543Fa932bBcC726627c55'
+                elif pos < 4:
+                    API_KEY = 'sk-sJu0o2MqZmf36gSvB2Fe2d3bD5Ed4593Bc7a47BfAeDc32Ab'
+                elif pos < 6:
+                    API_KEY = 'sk-QMBrGXW5jh7wmqVVA37e5d1cAe2e4e4cB89e0c6cEd049691'
+                elif pos < 8:
+                    API_KEY = 'sk-AtyNEBTZH0dwPkE5D0Fc313eD7394f40B663Bb70F90c21Ff'
+                elif pos < 10:
+                    API_KEY = 'sk-uHsH4IgqzE7GIHmnC43cFd13B7A948Ff82A99aFcE30926F4'
+                if pos == 0:
+                    URL = 'https://hk.xty.app/v1'
+                    API_KEY = 'sk-JfNgz8OGYdKCIjGZ12FfEb4e6cB84a3bBdD7F56500EfD3B3'
+                else:
+                    URL = 'https://hk.xty.app/v1'
+                    API_KEY = 'sk-NVIoJ1hQzPnoppWoDd076652884445CbA354817427E07559'
+
+
+
+
+                # # fast api
+                # pos = random.randint(0, 24)
+                # if pos == 0:
+                #     API_KEY = 'sk-JfNgz8OGYdKCIjGZ12FfEb4e6cB84a3bBdD7F56500EfD3B3'
+                # else:
+                #     API_KEY = 'sk-NVIoJ1hQzPnoppWoDd076652884445CbA354817427E07559'
+
+
+
+                # if pos < 2:
+                #     API_KEY = config.API_KEY_deepseek
+                # elif pos < 4:
+                #     API_KEY = "sk-2c568622b04846c6a74d100dcb7879b3"
+                # else:
+                #     API_KEY = "sk-d57bbec140b5449484c6a6de87eff614"
+
+
+>>>>>>> Stashed changes
                 output, singe_token_fee, single_generate_token_fee = send_request(messages, MODEL, API_KEY, URL)
             else:
                 output, singe_token_fee, single_generate_token_fee = send_request_to_Ali(messages)
@@ -1118,8 +1285,6 @@ def generate_answer(messages, MODEL=MODEL, API_KEY=G_API_KEY, URL=URL):
         except Exception as e:
             # Log the exception if needed
             retries += 1
-
-
             if retries > 20:
                 print(f"although this is a moderate exception, but this occur because the function sending request to OpenAI fail {retries} times")
                 print(f"normally it would retry until 50 times which is safe, but you should know why")
@@ -1129,7 +1294,7 @@ def generate_answer(messages, MODEL=MODEL, API_KEY=G_API_KEY, URL=URL):
                 print("This message comes from the send_message_safe function")
                 print("This should never happen since loop is so many times")
                 raise Exception("Failed to send message after 2 retries")
-            time.sleep(20)
+            time.sleep(4)
 
 
 
@@ -1145,14 +1310,66 @@ def parse_answer(sentence) -> chr:
     if not results:
         raise ValueError("No valid options found. Options must be one of [A], [B], or [C].")
     # 返回找到的所有匹配结果
-    pre = results[0]
-    for item in results:
-        if item[0] != pre:
-            raise ValueError("Options differ in the answer. Options must be one of [A], [B], or [C].")
-        elif item[0] != 'A' and item[0] != 'B' and item[0] != 'C':
-            raise ValueError("Options must be one of [A], [B], or [C].")
+    pre = results[-1]
 
-    return pre
+    return pre[-1]
+
+
+def send_request_fast_api(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=config.URL):
+    try:
+        conn = http.client.HTTPSConnection("api.chatanywhere.tech")
+        payload = json.dumps({
+            "model": "gpt-3.5-turbo-0125",
+            "messages": messages,
+            "temperature": 0,
+        })
+        headers = {
+            'Authorization': f'Bearer {API_KEY}',
+            'User-Agent': 'Apifox/1.0.0 (https://apifox.com)',
+            'Content-Type': 'application/json'
+        }
+        conn.request("POST", "/v1/chat/completions", payload, headers)
+        res = conn.getresponse()
+        data = res.read()
+        json_data = json.loads(data)
+        return json_data
+    except Exception as e:
+        raise e
+
+
+def send_request_llama(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=config.URL):
+    token_fee_shadow = 0.0
+    generate_token_fee_shadow = 0.0
+    client = OpenAI(
+        base_url="https://integrate.api.nvidia.com/v1",
+        api_key="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"
+    )
+
+    completion = client.chat.completions.create(
+        model="meta/llama3-8b-instruct",
+        messages=messages,
+        temperature=0,
+        top_p=1,
+        max_tokens=1024,
+        stream=False
+    )
+    return completion, token_fee_shadow, generate_token_fee_shadow
+
+
+
+class Message_:
+    def __init__(self, role, content):
+        self.role = role
+        self.content = content
+
+class Choice_:
+    def __init__(self, finish_reason, message):
+        self.finish_reason = finish_reason
+        self.message = message
+
+class Completion_:
+    def __init__(self, choices):
+        self.choices = choices
 
 
 def send_request(messages, MODEL=MODEL, API_KEY=G_API_KEY, URL=URL):
@@ -1183,6 +1400,7 @@ def send_request(messages, MODEL=MODEL, API_KEY=G_API_KEY, URL=URL):
     return completion, token_fee_shadow, generate_token_fee_shadow
 
 
+<<<<<<< Updated upstream
 def send_request_to_Ali(messages, need_print=False):
     token_fee_shadow = 0.0
     generate_token_fee_shadow = 0.0
@@ -1198,16 +1416,57 @@ def send_request_to_Ali(messages, need_print=False):
     choices = [Choice(c['finish_reason'], Message(c['message']['role'], c['message']['content'])) for c in
                responses['output']['choices']]
     completion = Completion(choices)
+=======
+def send_request_to_Ali(messages, need_print=True):
+    # API的URL和headers配置
+    access ='24.f7476dc1833e0164fde30b2a8cc76787.2592000.1720420511.282335-79973647'
+
+    url = "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/t2qxodon_cortantse?access_token=24.f7476dc1833e0164fde30b2a8cc76787.2592000.1720420511.282335-79973647"
+    headers = {
+        'Content-Type': 'application/json',
+    }
+
+    # 构造payload
+    payload = json.dumps({
+        "messages": messages,
+        "temperature": 0.01
+    })
+>>>>>>> Stashed changes
 
     try:
-        # 计算请求消息的 token 费用
-        input_tokens_fee = sum(count_tokens_fee(msg['content'], if_input = True) for msg in messages)
-        token_fee_shadow += input_tokens_fee  # 更新全局 token 费用
-        token_fee_shadow += count_tokens_fee(completion.choices[0].message.content, if_input = False)
-        generate_token_fee_shadow = count_tokens_fee(completion.choices[0].message.content, if_input = False)
-    except:
-        raise Exception("token_fee error")
-    return completion, token_fee_shadow, generate_token_fee_shadow
+        # 发送POST请求
+        response = requests.post(url, headers=headers, data=payload)
+        if response.status_code == 200:
+            # 解析JSON数据
+            response_data = response.json()
+            if 'result' in response_data:
+                # 创建Message_实例
+                message_instance = Message_(role="assistant", content=response_data['result'])
+                # 创建Choice_实例
+                choice_instance = Choice_(finish_reason="completed", message=message_instance)
+                # 创建Completion_实例
+                completion_instance = Completion_(choices=[choice_instance])
+
+                if need_print:
+                    print(completion_instance.choices[0].message.content)
+                return completion_instance
+            else:
+                # 检查是否有错误代码和错误消息
+                if 'error_code' in response_data and 'error_msg' in response_data:
+                    raise Exception(f"API Error {response_data['error_code']}: {response_data['error_msg']}")
+        else:
+            # 处理非200状态码
+            raise Exception(f"HTTP Error: {response.status_code} {response.text}")
+    except Exception as e:
+        # 异常处理
+        if need_print:
+            print(f"Error occurred: {e}")
+        raise
+
+    1/0
+
+
+
 
 
 
@@ -1275,20 +1534,6 @@ def return_group_a_and_group_b(json: json):
 
 
 
-# 用于转换
-class Message:
-    def __init__(self, role, content):
-        self.role = role
-        self.content = content
-
-class Choice:
-    def __init__(self, finish_reason, message):
-        self.finish_reason = finish_reason
-        self.message = message
-
-class Completion:
-    def __init__(self, choices):
-        self.choices = choices
 
 def clean_text(text):
     # 去除非字母和非基本标点的字符
@@ -1430,3 +1675,92 @@ if __name__ == '__main__':
 
         print(DATA_LIST)
 
+<<<<<<< Updated upstream
+=======
+    ### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    file_sys = FileSystem(f"data_{name}_Status", prefix="saving")
+    file_sys.save_content_in_binary(DATA_LIST)
+    print(DATA_LIST)
+
+
+
+def read_mask(file_path: str):
+    jsons = []
+    with open(file_path, 'rb') as file:
+        jsons = pickle.load(file)
+
+    for item in jsons:
+        back = item['rationale'][1]['content']
+        back = str(back)
+        back = back.split('\n')
+        back = back[2] + back[3]
+        back = back.split('Let')
+        back = back[0]
+        MASKING_CONTEXT[item['index']] = back
+
+
+
+
+
+if __name__ == '__main__':
+
+
+
+    from sample import *
+    import config
+
+    # 是否需要打印调试
+    need_print_mask = False
+    need_print_background = False
+
+    # 读取以前的background
+    # read_mask('log\\Age')
+    # NO_MASKING = True
+    # print(len(MASKING_CONTEXT))
+
+    max_worker = 5
+    threads = []
+
+
+    # 注意denpendency保存位置
+    start(0, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 8,  -1,False, "llama3")
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'Sexual_orientation', 'Sexual_orientation.jsonl', max_worker, 8, -1, False, "llama3")
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'Age', 'Age.jsonl', max_worker, 8,  -1,False, "llama3")
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'Disability_status', 'Disability_status.jsonl', max_worker, 8,  -1,False, "llama3")
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'Nationality', 'Nationality.jsonl', max_worker, 8,  -1,False, "llama3")
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'Physical_appearance', 'Physical_appearance.jsonl', max_worker, 8, -1, False, "llama3")
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'Religion', 'Religion.jsonl', max_worker, 8, -1, False, "llama3")
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'Race_ethnicity', 'Race_ethnicity.jsonl', max_worker, 8, -1, False, "llama3")
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'SES', 'SES.jsonl', max_worker, 8, -1, False, "llama3")
+
+
+
+    # xuanying 只要跑第 5 方法 ，其它continue
+    # 1.小规模样本 好的
+    # 2.大规模样本 证明
+
+
+
+    #start(4, 1, True, 'Disability', 'Disability_status.jsonl', 150)
+
+
+
+
+
+>>>>>>> Stashed changes
