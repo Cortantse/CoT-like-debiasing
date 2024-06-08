@@ -1,10 +1,4 @@
-<<<<<<< Updated upstream
 
-
-
-
-
-=======
 import json
 import random
 import threading
@@ -43,7 +37,7 @@ actual_dropping_num_because_answer = [0]
 masking_actual_usage = [0]
 SEE = [True]
 ONLY_NEED_MASK = False
->>>>>>> Stashed changes
+
 '''
 structure of the json file
 {'id': 'e0c0ef99f05974ad0d9dc292f59e3149', 'target': 'Turkey', 'bias_type': 'race',
@@ -78,8 +72,7 @@ structure of the json file
        {'human_id': '9134c2bcc0b00c6255e036e971b48088', 'label': 'stereotype'},
         {'human_id': '35fb0b66a0e7d812fccc6e487a130bb9', 'label': 'stereotype'}]}}
 '''
-<<<<<<< Updated upstream
-=======
+
 class Benchmark:
     def __init__(self, data, technique_prompt = '', if_intra = True):
         self.data = data
@@ -583,7 +576,7 @@ class Benchmark:
                 return str_new
         str = str
         return str
->>>>>>> Stashed changes
+
 
     def check_mask_context(self, context, context_list):
         word_list = [aa, bb]
@@ -617,9 +610,7 @@ if __name__ == '__main__':
     data = json.load(big_json)
     big_json.close()
 
-<<<<<<< Updated upstream
-    print(data['data']['intersentence'][0])
-=======
+
     ONLY_NEED_MASK = False
 
     random.shuffle(data['data']['intrasentence'])
@@ -636,5 +627,5 @@ if __name__ == '__main__':
 
 
 
->>>>>>> Stashed changes
+
 
