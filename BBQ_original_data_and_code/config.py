@@ -32,16 +32,12 @@ G_API_KEY3 = "sk-eYGV1gPhgIqjEeRCC690Ad1aC5C84115B5B823E523C4D2D2"
 
 
 
-# URL = 'https://api.deepseek.com'
-# API_KEY = 'sk-dbfe46812522413b8a85f450bdba3525' # deep seek for simple
-# MODEL = 'deepseek-chat'
-
 TEMPERATURE = 0
 
 MAX_ITER_IN_MASK = 5
-MAX_ITER_IN_ANSWER = 3
-MAX_ITER_IN_BACKGROUND = 1
-MAX_ITER_IN_MULTI_AGENT = 3
+MAX_ITER_IN_ANSWER = 5
+MAX_ITER_IN_BACKGROUND = 5
+MAX_ITER_IN_MULTI_AGENT = 5
 
 IF_MASK = True
 IF_BACKGROUND = True
@@ -50,6 +46,13 @@ IF_CHECK_IN_MASK = True
 IF_CHECK_IN_BACKGROUND = True
 
 BACK_GROUND_INDEX = 1
+IF_COUNTERFACT = True
+
+REVERSE_X_Y = False
+
+global_prompt = ""
+
+
 
 if __name__ == '__main__':
     pass

@@ -466,8 +466,8 @@ class MaskSystem:
                     self.check_mask_context(context, context_list)
                     # XX YY, XXXXXXXXXX, YYYYYYYYYY
 
-                # 先至少迭代三次，没到就保存后重新，保存函数在check_mask_context里
-                if i < 2:
+                # 先至少迭代二次，没到就保存后重新，保存函数在check_mask_context里
+                if i < 1:
                     if need_print_mask:
                         print(context)
                     continue
@@ -765,12 +765,23 @@ class MaskSystem:
                 if MASKING_CONTEXT.get(json_data['example_id']) != None:
                     context_without_social_group = MASKING_CONTEXT[json_data['example_id']]
 
+
+                    if config.REVERSE_X_Y:
+                        context_without_social_group = replace_original_XY_to_first_character_and_second_character(context_without_social_group,
+                                                                                                               'Y', 'X')
+
+
                 else:
                     MASKING_NUM[0] += 1
                     if NO_MASKING:
                         print('this might be abnormal, meaning this method is not using previous masked context')
                         print(f"actual_need_of_masked - actual_usage_of_masked = {MASKING_NUM[0]}")
                     context_without_social_group = self.give_mask_context(question, json_data, failure_data)
+
+                    if config.REVERSE_X_Y:
+                        context_without_social_group = replace_original_XY_to_first_character_and_second_character(context_without_social_group,
+                                                                                                               'Y', 'X')
+
                     MASKING_CONTEXT[json_data['example_id']] = context_without_social_group
 
         except Exception as e:
@@ -1533,11 +1544,15 @@ def send_request(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=con
     return completion, token_fee_shadow, generate_token_fee_shadow
 
 
-def send_request_to_Ali(messages, need_print=True):
+def send_request_to_Ali(messages, need_print=False):
     # API的URL和headers配置
     access ='24.f7476dc1833e0164fde30b2a8cc76787.2592000.1720420511.282335-79973647'
 
-    url = "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/t2qxodon_cortantse?access_token=24.f7476dc1833e0164fde30b2a8cc76787.2592000.1720420511.282335-79973647"
+    free = 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/llama_3_8b'
+
+    private = 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/t2qxodon_cortantse'
+
+    url = "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/llama_3_8b?access_token=24.f7476dc1833e0164fde30b2a8cc76787.2592000.1720420511.282335-79973647"
     headers = {
         'Content-Type': 'application/json',
     }
@@ -1865,6 +1880,20 @@ def read_mask(file_path: str):
         MASKING_CONTEXT[item['index']] = back
 
 
+def replace_special_characters(text, target, replacement):
+    pattern = r'(?<![a-zA-Z])' + re.escape(target) + r'(?![a-zA-Z])'
+    # 替换找到的所有符合条件的target为replacement
+    result_text = re.sub(pattern, replacement, text)
+
+    return result_text
+
+
+def replace_original_XY_to_first_character_and_second_character(text, first_character,
+                                                                second_character):
+    text = replace_special_characters(text, 'X', '*')
+    text = replace_special_characters(text, 'Y', second_character)
+    text = replace_special_characters(text, '*', first_character)
+    return text
 
 
 if __name__ == '__main__':
@@ -1883,36 +1912,68 @@ if __name__ == '__main__':
     # NO_MASKING = True
     # print(len(MASKING_CONTEXT))
 
-    max_worker = 5
+    max_worker = 10
     threads = []
+
+    model = "llama3_test"
 
 
     # 注意denpendency保存位置
-    start(3, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 8,  -1,False, "llama3")
+    start(0, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 8,  -1,False, model)
     MASKING_CONTEXT = {}
     MASKING_NUM = {}
-    start(0, 1, True, 'Sexual_orientation', 'Sexual_orientation.jsonl', max_worker, 8, -1, False, "llama3")
+    start(0, 1, True, 'Sexual_orientation', 'Sexual_orientation.jsonl', max_worker, 8, -1, False, model)
     MASKING_CONTEXT = {}
     MASKING_NUM = {}
-    start(0, 1, True, 'Age', 'Age.jsonl', max_worker, 8,  -1,False, "llama3")
+    start(0, 1, True, 'Age', 'Age.jsonl', max_worker, 8,  -1,False, model)
     MASKING_CONTEXT = {}
     MASKING_NUM = {}
-    start(0, 1, True, 'Disability_status', 'Disability_status.jsonl', max_worker, 8,  -1,False, "llama3")
+    start(0, 1, True, 'Disability_status', 'Disability_status.jsonl', max_worker, 8,  -1,False, model)
     MASKING_CONTEXT = {}
     MASKING_NUM = {}
-    start(0, 1, True, 'Nationality', 'Nationality.jsonl', max_worker, 8,  -1,False, "llama3")
+    start(0, 1, True, 'Nationality', 'Nationality.jsonl', max_worker, 8,  -1,False, model)
     MASKING_CONTEXT = {}
     MASKING_NUM = {}
-    start(0, 1, True, 'Physical_appearance', 'Physical_appearance.jsonl', max_worker, 8, -1, False, "llama3")
+    start(0, 1, True, 'Physical_appearance', 'Physical_appearance.jsonl', max_worker, 8, -1, False, model)
     MASKING_CONTEXT = {}
     MASKING_NUM = {}
-    start(0, 1, True, 'Religion', 'Religion.jsonl', max_worker, 8, -1, False, "llama3")
+    start(0, 1, True, 'Religion', 'Religion.jsonl', max_worker, 8, -1, False, model)
     MASKING_CONTEXT = {}
     MASKING_NUM = {}
-    start(0, 1, True, 'Race_ethnicity', 'Race_ethnicity.jsonl', max_worker, 8, -1, False, "llama3")
+    start(0, 1, True, 'Race_ethnicity', 'Race_ethnicity.jsonl', max_worker, 8, -1, False, model)
     MASKING_CONTEXT = {}
     MASKING_NUM = {}
-    start(0, 1, True, 'SES', 'SES.jsonl', max_worker, 8, -1, False, "llama3")
+    start(0, 1, True, 'SES', 'SES.jsonl', max_worker, 8, -1, False, model)
+
+    #假如跑完了
+    start(0, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 8, -1, False, model)
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 8, -1, False, model)
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'Sexual_orientation', 'Sexual_orientation.jsonl', max_worker, 8, -1, False, model)
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'Age', 'Age.jsonl', max_worker, 8, -1, False, model)
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'Disability_status', 'Disability_status.jsonl', max_worker, 8, -1, False, model)
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'Nationality', 'Nationality.jsonl', max_worker, 8, -1, False, model)
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'Physical_appearance', 'Physical_appearance.jsonl', max_worker, 8, -1, False, model)
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'Religion', 'Religion.jsonl', max_worker, 8, -1, False, model)
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'Race_ethnicity', 'Race_ethnicity.jsonl', max_worker, 8, -1, False, model)
+    MASKING_CONTEXT = {}
+    MASKING_NUM = {}
+    start(0, 1, True, 'SES', 'SES.jsonl', max_worker, 8, -1, False, model)
 
 
 

@@ -447,11 +447,6 @@ example7_background_response_counterfactual = {
 
 
 
-JSON_FORMAT = "You must output in json."
-
-
-
-
 
 
 
