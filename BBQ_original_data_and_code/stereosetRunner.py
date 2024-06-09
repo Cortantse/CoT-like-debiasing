@@ -31,10 +31,12 @@ dropping_num = [0]
 imperfect_mask = [0]
 imperfect_background = [0]
 MASKING_CONTEXT = {}
-
+BACK_GROUND_CONTEXT = {}
+back_ground_actual_usage = [0]
+not_perfect_background_generation = [0]
 actual_asking_for_answer = [0]
 actual_dropping_num_because_answer = [0]
-
+bad_background = [0]
 masking_actual_usage = [0]
 SEE = [True]
 ONLY_NEED_MASK = False
@@ -205,6 +207,103 @@ class Benchmark:
         #     SEE[0] = False
         return messages
 
+    def initialize_masking_context_inter(self, unmasked_context):
+        messages = []
+
+        messages_list = []
+
+        qa1_pro = s_mask_asking.copy()
+        qa1_pro['context'] = inter_s_example1_context
+        qa1_answer = {
+            "context": inter_s_example1_context,
+            "attributes_involved": inter_s_example1_attributes_involved,
+            "context_masked": inter_s_example1_context_masked,
+        }
+
+        qa2_pro = s_mask_asking.copy()
+        qa2_pro['context'] = inter_s_example2_context
+        qa2_answer = {
+            "context": inter_s_example2_context,
+            "attributes_involved": inter_s_example2_attributes_involved,
+            "context_masked": inter_s_example2_context_masked,
+        }
+
+        qa3_pro = s_mask_asking.copy()
+        qa3_pro['context'] = inter_s_example3_context
+        qa3_answer = {
+            "context": inter_s_example3_context,
+            "attributes_involved": inter_s_example3_attributes_involved,
+            "context_masked": inter_s_example3_context_masked,
+        }
+
+        qa4_pro = s_mask_asking.copy()
+        qa4_pro['context'] = inter_s_example4_context
+        qa4_answer = {
+            "context": inter_s_example4_context,
+            "attributes_involved": inter_s_example4_attributes_involved,
+            "context_masked": inter_s_example4_context_masked,
+        }
+
+        qa5_pro = s_mask_asking.copy()
+        qa5_pro['context'] = inter_s_example5_context
+        qa5_answer = {
+            "context": inter_s_example5_context,
+            "attributes_involved": inter_s_example5_attributes_involved,
+            "context_masked": inter_s_example5_context_masked,
+        }
+
+        qa6_pro = s_mask_asking.copy()
+        qa6_pro['context'] = inter_s_example6_context
+        qa6_answer = {
+            "context": inter_s_example6_context,
+            "attributes_involved": inter_s_example6_attributes_involved,
+            "context_masked": inter_s_example6_context_masked,
+        }
+
+        qa7_pro = s_mask_asking.copy()
+        qa7_pro['context'] = inter_s_example7_context
+        qa7_answer = {
+            "context": inter_s_example7_context,
+            "attributes_involved": inter_s_example7_attributes_involved,
+            "context_masked": inter_s_example7_context_masked,
+        }
+
+        messages_list.append((qa1_pro, qa1_answer))
+        messages_list.append((qa2_pro, qa2_answer))
+        messages_list.append((qa3_pro, qa3_answer))
+        messages_list.append((qa4_pro, qa4_answer))
+        messages_list.append((qa5_pro, qa5_answer))
+        messages_list.append((qa6_pro, qa6_answer))
+        messages_list.append((qa7_pro, qa7_answer))
+
+        random.shuffle(messages_list)
+
+        for i, item in enumerate(messages_list):
+            qa_pro = item[0]
+            qa_answer = item[1]
+            messages.append({'role': 'user', 'content': json.dumps(qa_pro)})
+            messages.append({'role': 'assistant', 'content': json.dumps(qa_answer)})
+
+        asking = s_mask_asking.copy()
+        # 将unmasked的去掉
+        unmasked_context = unmasked_context.split('\n')
+
+        tem = ''
+        for i in range(len(unmasked_context) - 1):
+            tem += unmasked_context[i]
+        unmasked_context = tem
+
+        asking['context'] = unmasked_context
+        messages.append({'role': 'user', 'content': json.dumps(asking)})
+
+        # if SEE[0]:
+        #     print(messages)
+        #     SEE[0] = False
+        return messages
+
+
+
+
     def transfer_label(self, label):
         if label == 'stereotype':
             return 1
@@ -323,7 +422,7 @@ class Benchmark:
 
             except Exception as e:
                 # this problem in benign, ignore and retry
-
+                print(e)
                 time.sleep(5)
                 continue
 
@@ -347,15 +446,83 @@ class Benchmark:
         raise Exception('should never be here in masking')
 
 
-
-
     def give_background(self, unmasked_context, masked_context, background_type):
         # override
         background_type = global_background_index
         # 针对masked_context, model要从masked_context给出相关信息
         # 如果有background风格，还要通过形容词级别的
+        messages = []
+        context_list = []
+        failure = []
+        if self.if_tra:
+            messages = self.initialize_background_context_intra(unmasked_context, masked_context, background_type)
+        else:
+            messages = self.initialize_background_context_inter(unmasked_context, masked_context, background_type)
 
-    def run_single_question(self, question_index, if_need_masked_context, if_need_background, status_array, returned_answers, background_type, events):
+        for i in range(config.MAX_ITER_IN_MASK):
+            try:
+                completion, single_token_fee, single_generate_token_fee = Multi_Agent.generate_answer(messages)
+                back_ground_actual_usage[0] += 1
+                token_fee[0] += single_token_fee
+                generate_token_fee[0] += single_generate_token_fee
+                context = completion.choices[0].message.content
+                failure.append(context)
+                #对context进行预处理
+                context = self.pre_process_json(context, 2)
+
+
+                # 替换单引号，因为可能有格式问题
+                context = context.replace("""\'""", "")
+                context = json.loads(context)
+
+                context = context['formatted_differences_between_masked_and_unmasked']
+                print(context)
+                context = str(context)
+                # print(context)
+                # print('*'*20)
+
+                #根据不同的background类型选取不同的check方法
+                if config.BACK_GROUND_INDEX == 1 and config.IF_CHECK_IN_BACKGROUND:
+                    self.check_background_context_neutral(context, context_list, masked_context)
+
+
+                context = self.normalize_context(context)
+
+                return context
+
+            except Exception as e:
+                # this problem in benign, ignore and retry
+                print(context)
+                print(e)
+                continue
+
+
+        # 循环次数又耗尽了，
+        # choose as many points as possible
+        max_points, max_index = 0, -1
+
+        for i, item in enumerate(context_list):
+
+            if item[0] > max_points:
+                max_points = item[0]
+                max_index = i
+
+        if max_index != -1:
+            not_perfect_background_generation[0] += 1
+            return self.normalize_context(context_list[max_index][1])
+
+        if len(context_list) == 0:
+            print("background could not produce any good results")
+            print(failure)
+
+        bad_background[0] += 1
+        return context_list[0][1]
+
+
+
+
+
+    def run_single_question(self, question_index, if_need_masked_context, if_need_background, status_array, returned_answers, background_type, events, events_back):
         try:
             pre_processed = self.constructed_question[question_index]['question']
             real_answer = self.constructed_question[question_index]['answer']
@@ -413,8 +580,9 @@ class Benchmark:
                     masked_context = pre_processed
                 # mask时会去掉，所以加回去
 
-            except:
+            except Exception as e:
                 # 不需要mask的情况下不会出exception
+                print(e)
                 masked_context = pre_processed + self.technique_prompt
                 MASKING_CONTEXT[question_index] = masked_context
                 imperfect_mask[0] += 6
@@ -423,13 +591,26 @@ class Benchmark:
 
 
             try:
-                if if_need_background:
-                    background = self.give_background(pre_processed, masked_context, background_type)
+                if question_index % 6 == 0:
+                    if if_need_background:
+                        if BACK_GROUND_CONTEXT.get(question_index//6) != None:
+                            background = BACK_GROUND_CONTEXT[question_index//6]
+                        else:
+                            background = self.give_background(pre_processed, masked_context, background_type)
+                            BACK_GROUND_CONTEXT[question_index//6] = background
+                        events_back[question_index//6].set()
+                else:
+                    events_back[question_index//6].wait()
+                    if BACK_GROUND_CONTEXT.get(question_index // 6) != None:
+                        background = BACK_GROUND_CONTEXT[question_index // 6]
+                    else:
+                        background = ''
             except:
                 background = ''
+                events_back[question_index // 6].set()
                 imperfect_background[0] += 1
 
-            messages = [{'role': 'user', 'content': background + ' \n' + masked_context}]
+            messages = [{'role': 'user', 'content': background + ' \n\n' + masked_context}]
 
 
             # 先生成一次CoT
@@ -526,6 +707,7 @@ class Benchmark:
 
         # 创建冻结进程
         events = [threading.Event() for _ in range(num_of_jsons//6)]
+        events_back = [threading.Event() for _ in range(num_of_jsons//6)]
 
         # 使用线程池来运行任务
 
@@ -535,13 +717,13 @@ class Benchmark:
                 futures = [
                     executor.submit(self.run_single_question, i, if_need_masked_context, if_need_background,
                                     status_array,
-                                    returned_answers, background_type, events) for i in range(num_of_jsons) if i % 6 == 0]
+                                    returned_answers, background_type, events, events_back) for i in range(num_of_jsons) if i % 6 == 0]
         else:
             with ThreadPoolExecutor(max_workers=max_worker) as executor:
                 futures = [
                     executor.submit(self.run_single_question, i, if_need_masked_context, if_need_background,
                                     status_array,
-                                    returned_answers, background_type, events) for i in range(num_of_jsons)]
+                                    returned_answers, background_type, events, events_back) for i in range(num_of_jsons)]
 
         # 等待进度条线程结束
         bar_thread.join()
@@ -596,7 +778,20 @@ class Benchmark:
 
         f.save_content_in_binary(saving)
 
-        tem = {'ss': ss, 'lms': lms, 'icat': icat, 'token_fee': token_fee[0], 'generate_token_fee': generate_token_fee[0], 'dropping_num': dropping_num[0], 'imperfect_mask': imperfect_mask[0], 'imperfect_background': imperfect_background[0], 'actual_asking_for_answer': actual_asking_for_answer[0], 'Masking_actual_usage': masking_actual_usage[0], 'rechecked_dropping': rechecked_dropping}
+        tem = {'ss': ss, 'lms': lms, 'icat': icat, 'token_fee': token_fee[0], 'generate_token_fee': generate_token_fee[0], 'dropping_num': dropping_num[0], 'imperfect_mask': imperfect_mask[0],
+               'imperfect_background': imperfect_background[0], 'actual_asking_for_answer': actual_asking_for_answer[0],
+               'Masking_actual_usage': masking_actual_usage[0], 'rechecked_dropping': rechecked_dropping,
+               'back_ground_actual_usage': back_ground_actual_usage[0],
+               'bad_background': bad_background[0], 'not_perfect_background_generation': not_perfect_background_generation[0],}
+
+        dropping_num [0] = 0
+        imperfect_mask[0] = 0
+        imperfect_background[0] = 0
+        actual_asking_for_answer[0] = 0
+        masking_actual_usage[0] = 0
+        back_ground_actual_usage[0] = 0
+        bad_background[0] = 0
+        not_perfect_background_generation[0] = 0
 
         f.save_bias_score(tem)
 
@@ -642,99 +837,240 @@ class Benchmark:
         if points == 0:
             raise Exception('no masking words')
 
-    def initialize_masking_context_inter(self, unmasked_context):
+    def initialize_background_context_intra(self, unmasked_context, masked_context, background_type):
         messages = []
 
+        # 根据background type
+        if background_type == 1:
+            # neutral
+            background_asking = background_asking_neutral
+            example1_background_response = s_example1_background_response
+            example2_background_response = s_example2_background_response
+            example3_background_response = s_example3_background_response
+            example4_background_response = s_example4_background_response
+            example5_background_response = s_example5_background_response
+            example7_background_response = s_example7_background_response
+            example8_background_response = s_example8_background_response
+
+
+
+
+        # 选择example
+        example1_background_unmasked_context = s_example1_context
+        example1_background_masked_context = s_example1_context_masked
+
+        example2_background_unmasked_context = s_example2_context
+        example2_background_masked_context = s_example2_context_masked
+
+        example3_background_unmasked_context = s_example3_context
+        example3_background_masked_context = s_example3_context_masked
+
+        example4_background_unmasked_context = s_example4_context
+        example4_background_masked_context = s_example4_context_masked
+
+        example5_background_unmasked_context = s_example5_context
+        example5_background_masked_context = s_example5_context_masked
+
+        example7_background_unmasked_context = s_example7_context
+        example7_background_masked_context = s_example7_context_masked
+
+        example8_background_unmasked_context = s_example8_context
+        example8_background_masked_context = s_example8_context_masked
+
+
+        example1_question = background_asking.copy()
+        example1_question['unmasked_context'] = example1_background_unmasked_context
+        example1_question['masked_context'] = example1_background_masked_context
+
+        example2_question = background_asking.copy()
+        example2_question['unmasked_context'] = example2_background_unmasked_context
+        example2_question['masked_context'] = example2_background_masked_context
+
+        example3_question = background_asking.copy()
+        example3_question['unmasked_context'] = example3_background_unmasked_context
+        example3_question['masked_context'] = example3_background_masked_context
+
+        example4_question = background_asking.copy()
+        example4_question['unmasked_context'] = example4_background_unmasked_context
+        example4_question['masked_context'] = example4_background_masked_context
+
+        example5_question = background_asking.copy()
+        example5_question['unmasked_context'] = example5_background_unmasked_context
+        example5_question['masked_context'] = example5_background_masked_context
+
+        example7_question = background_asking.copy()
+        example7_question['unmasked_context'] = example7_background_unmasked_context
+        example7_question['masked_context'] = example7_background_masked_context
+
+        example8_question = background_asking.copy()
+        example8_question['unmasked_context'] = example8_background_unmasked_context
+        example8_question['masked_context'] = example8_background_masked_context
+
         messages_list = []
-
-        qa1_pro = s_mask_asking.copy()
-        qa1_pro['context'] = inter_s_example1_context
-        qa1_answer = {
-            "context": inter_s_example1_context,
-            "attributes_involved": inter_s_example1_attributes_involved,
-            "context_masked": inter_s_example1_context_masked,
-        }
-
-        qa2_pro = s_mask_asking.copy()
-        qa2_pro['context'] = inter_s_example2_context
-        qa2_answer = {
-            "context": inter_s_example2_context,
-            "attributes_involved": inter_s_example2_attributes_involved,
-            "context_masked": inter_s_example2_context_masked,
-        }
-
-        qa3_pro = s_mask_asking.copy()
-        qa3_pro['context'] = inter_s_example3_context
-        qa3_answer = {
-            "context": inter_s_example3_context,
-            "attributes_involved": inter_s_example3_attributes_involved,
-            "context_masked": inter_s_example3_context_masked,
-        }
-
-        qa4_pro = s_mask_asking.copy()
-        qa4_pro['context'] = inter_s_example4_context
-        qa4_answer = {
-            "context": inter_s_example4_context,
-            "attributes_involved": inter_s_example4_attributes_involved,
-            "context_masked": inter_s_example4_context_masked,
-        }
-
-        qa5_pro = s_mask_asking.copy()
-        qa5_pro['context'] = inter_s_example5_context
-        qa5_answer = {
-            "context": inter_s_example5_context,
-            "attributes_involved": inter_s_example5_attributes_involved,
-            "context_masked": inter_s_example5_context_masked,
-        }
-
-        qa6_pro = s_mask_asking.copy()
-        qa6_pro['context'] = inter_s_example6_context
-        qa6_answer = {
-            "context": inter_s_example6_context,
-            "attributes_involved": inter_s_example6_attributes_involved,
-            "context_masked": inter_s_example6_context_masked,
-        }
-
-        qa7_pro = s_mask_asking.copy()
-        qa7_pro['context'] = inter_s_example7_context
-        qa7_answer = {
-            "context": inter_s_example7_context,
-            "attributes_involved": inter_s_example7_attributes_involved,
-            "context_masked": inter_s_example7_context_masked,
-        }
-
-        messages_list.append((qa1_pro, qa1_answer))
-        messages_list.append((qa2_pro, qa2_answer))
-        messages_list.append((qa3_pro, qa3_answer))
-        messages_list.append((qa4_pro, qa4_answer))
-        messages_list.append((qa5_pro, qa5_answer))
-        messages_list.append((qa6_pro, qa6_answer))
-        messages_list.append((qa7_pro, qa7_answer))
+        messages_list.append((example1_question, example1_background_response))
+        messages_list.append((example2_question, example2_background_response))
+        messages_list.append((example3_question, example3_background_response))
+        messages_list.append((example4_question, example4_background_response))
+        messages_list.append((example5_question, example5_background_response))
+        messages_list.append((example7_question, example7_background_response))
+        messages_list.append((example8_question, example8_background_response))
 
         random.shuffle(messages_list)
 
-        for i, item in enumerate(messages_list):
-            qa_pro = item[0]
-            qa_answer = item[1]
-            messages.append({'role': 'user', 'content': json.dumps(qa_pro)})
-            messages.append({'role': 'assistant', 'content': json.dumps(qa_answer)})
+        for item in messages_list:
+            messages.append({'role': 'user', 'content': json.dumps(item[0])})
+            messages.append({'role': 'assistant', 'content': json.dumps(item[1])})
 
-        asking = s_mask_asking.copy()
-        # 将unmasked的去掉
-        unmasked_context = unmasked_context.split('\n')
+        asking_question = background_asking.copy()
+        asking_question['unmasked_context'] = unmasked_context
+        asking_question['masked_context'] = masked_context
+        messages.append({'role': 'user', 'content': json.dumps(asking_question)})
+        messages.append({'role': 'user', 'content': 'Please output in json format.'})
 
-        tem = ''
-        for i in range(len(unmasked_context) - 1):
-            tem += unmasked_context[i]
-        unmasked_context = tem
-
-        asking['context'] = unmasked_context
-        messages.append({'role': 'user', 'content': json.dumps(asking)})
-
-        # if SEE[0]:
-        #     print(messages)
-        #     SEE[0] = False
         return messages
+
+
+    def initialize_background_context_inter(self, unmasked_context, masked_context, background_type):
+        messages = []
+
+        # 根据background type
+        if background_type == 1:
+            # neutral
+            background_asking = background_asking_neutral
+            example1_background_response = inter_s_example1_background_response
+            example2_background_response = inter_s_example2_background_response
+            example3_background_response = inter_s_example3_background_response
+            example4_background_response = inter_s_example4_background_response
+            example5_background_response = inter_s_example5_background_response
+            example6_background_response = inter_s_example6_background_response
+            example7_background_response = inter_s_example7_background_response
+
+        # 选择example
+        example1_background_unmasked_context = inter_s_example1_context
+        example1_background_masked_context = inter_s_example1_context_masked
+
+        example2_background_unmasked_context = inter_s_example2_context
+        example2_background_masked_context = inter_s_example2_context_masked
+
+        example3_background_unmasked_context = inter_s_example3_context
+        example3_background_masked_context = inter_s_example3_context_masked
+
+        example4_background_unmasked_context = inter_s_example4_context
+        example4_background_masked_context = inter_s_example4_context_masked
+
+        example5_background_unmasked_context = inter_s_example5_context
+        example5_background_masked_context = inter_s_example5_context_masked
+
+        example6_background_unmasked_context = inter_s_example6_context
+        example6_background_masked_context = inter_s_example6_context_masked
+
+        example7_background_unmasked_context = inter_s_example7_context
+        example7_background_masked_context = inter_s_example7_context_masked
+
+        example1_question = background_asking.copy()
+        example1_question['unmasked_context'] = example1_background_unmasked_context
+        example1_question['masked_context'] = example1_background_masked_context
+
+        example2_question = background_asking.copy()
+        example2_question['unmasked_context'] = example2_background_unmasked_context
+        example2_question['masked_context'] = example2_background_masked_context
+
+        example3_question = background_asking.copy()
+        example3_question['unmasked_context'] = example3_background_unmasked_context
+        example3_question['masked_context'] = example3_background_masked_context
+
+        example4_question = background_asking.copy()
+        example4_question['unmasked_context'] = example4_background_unmasked_context
+        example4_question['masked_context'] = example4_background_masked_context
+
+        example5_question = background_asking.copy()
+        example5_question['unmasked_context'] = example5_background_unmasked_context
+        example5_question['masked_context'] = example5_background_masked_context
+
+        example6_question = background_asking.copy()
+        example6_question['unmasked_context'] = example6_background_unmasked_context
+        example6_question['masked_context'] = example6_background_masked_context
+
+        example7_question = background_asking.copy()
+        example7_question['unmasked_context'] = example7_background_unmasked_context
+        example7_question['masked_context'] = example7_background_masked_context
+
+        messages_list = []
+        messages_list.append((example1_question, example1_background_response))
+        messages_list.append((example2_question, example2_background_response))
+        messages_list.append((example3_question, example3_background_response))
+        messages_list.append((example4_question, example4_background_response))
+        messages_list.append((example5_question, example5_background_response))
+        messages_list.append((example6_question, example6_background_response))
+        messages_list.append((example7_question, example7_background_response))
+
+        random.shuffle(messages_list)
+
+        for item in messages_list:
+            messages.append({'role': 'user', 'content': json.dumps(item[0])})
+            messages.append({'role': 'assistant', 'content': json.dumps(item[1])})
+
+        asking_question = background_asking.copy()
+        asking_question['unmasked_context'] = unmasked_context
+        asking_question['masked_context'] = masked_context
+        messages.append({'role': 'user', 'content': json.dumps(asking_question)})
+        messages.append({'role': 'user', 'content': 'Please output in json format.'})
+
+        return messages
+
+    def normalize_context(self, text):
+        if not isinstance(text, str):
+            raise ValueError("Input must be a string")
+        text = text.replace("""\'""", """\"""")
+
+        # 将字符串转换为字典
+        try:
+            context_dict = json.loads(text)
+        except json.JSONDecodeError:
+            raise ValueError("Input string is not a valid JSON")
+
+        # 连接所有值，并删除符号
+        normalized_text = ' '.join(context_dict.values()).replace('[', '').replace(']', '').replace("(", "").replace(
+            ")", "")
+
+        return normalized_text
+
+    def check_background_context_neutral(self, context, context_list, masked_context):
+        word_list = ['X', 'Y', 'Z']
+        # 提取masked_context中的word list，只能是XYZ，然后bool值显示masked context有没有出现
+        if_have_xx_yy_zz = [word in masked_context for word in word_list]
+
+        for i, word in enumerate(word_list):
+            if if_have_xx_yy_zz[i] == False:
+                continue
+            if context.find(word) == -1:
+                context_list.append(context)
+                raise Exception('do not have x y z in the background context')
+
+
+
+# 包装类
+class Message:
+    def __init__(self, role, content):
+        self.role = role
+        self.content = content
+
+class Choice:
+    def __init__(self, index, message):
+        self.index = index
+        self.message = message
+
+class Completion:
+    def __init__(self, id, object, created, model, choices, usage, system_fingerprint):
+        self.id = id
+        self.object = object
+        self.created = created
+        self.model = model
+        self.choices = choices
+        self.usage = usage
+        self.system_fingerprint = system_fingerprint
+
+
 
 
 if __name__ == '__main__':
@@ -764,7 +1100,7 @@ if __name__ == '__main__':
     # 1 是neutral 2 是positive 3是counterfactual
     prompt_using = CoT_induce_prompt
 
-    max_worker = 5
+    max_worker = 25
 
 
     if_intra = None
@@ -774,11 +1110,11 @@ if __name__ == '__main__':
         if_intra = True
     else:
         raise Exception('in valid testing type')
-    benchmark = Benchmark(data['data'][testing][:5], prompt_using , if_intra)
+    benchmark = Benchmark(data['data'][testing][582:585], prompt_using , if_intra)
 
     # 禁止对benchmark.constructed_question进行 random 操作， 会破坏数据结构！！！！！！！ 同时，只能在6倍数区间采样，否咋会卡死进程
-    for i in range(10):
-        print(benchmark.constructed_question[i])
+    # for i in range(10):
+    #     print(benchmark.constructed_question[i])
 
     benchmark.run_benchmark(if_mask, if_background, max_worker, prefix)
 

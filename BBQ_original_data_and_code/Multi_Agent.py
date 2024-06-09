@@ -157,7 +157,7 @@ class MaskSystem:
 
         random.shuffle(messages_list)
 
-        for item in messages_list:
+        for i, item in enumerate(messages_list):
             messages.append({'role': 'user', 'content': json.dumps(item[0])})
             messages.append({'role': 'assistant', 'content': json.dumps(item[1])})
 
@@ -183,7 +183,8 @@ class MaskSystem:
 
         asking_question = mask_asking.copy()
         asking_question['context'] = question
-        messages.append({'role': 'user', 'content': json.dumps(asking_question) + json_induce})
+        messages.append({'role': 'user', 'content': json.dumps(asking_question) })
+        messages.append({'role': 'user', 'content': "Please output in json format."})
 
         # if first_time[0]:
         #     print(messages)
@@ -249,7 +250,8 @@ class MaskSystem:
         asking_question = background_asking_counterfactual.copy()
         asking_question['unmasked_context'] = unmasked_context
         asking_question['masked_context'] = masked_context
-        messages.append({'role': 'user', 'content': json.dumps(asking_question) + json_induce})
+        messages.append({'role': 'user', 'content': json.dumps(asking_question)})
+        messages.append({'role': 'user', 'content': "Please output in json format."})
 
         return messages
 
@@ -318,7 +320,8 @@ class MaskSystem:
         asking_question = background_asking_neutral.copy()
         asking_question['unmasked_context'] = unmasked_context
         asking_question['masked_context'] = masked_context
-        messages.append({'role': 'user', 'content': json.dumps(asking_question) + json_induce})
+        messages.append({'role': 'user', 'content': json.dumps(asking_question)})
+        messages.append({'role': 'user', 'content': "Please output in json format."})
 
         return messages
 
@@ -387,7 +390,8 @@ class MaskSystem:
         asking_question = background_asking.copy()
         asking_question['unmasked_context'] = unmasked_context
         asking_question['masked_context'] = masked_context
-        messages.append({'role': 'user', 'content': json.dumps(asking_question) + json_induce})
+        messages.append({'role': 'user', 'content': json.dumps(asking_question)})
+        messages.append({'role': 'user', 'content': "Please output in json format."})
 
         return messages
 
@@ -763,7 +767,7 @@ class MaskSystem:
         contexts.append({'role': 'assistant', 'content': answer_parsed_after})
         return contexts
 
-    def give_answer(self, question, agent_num, round_num, json_data, failure_data):
+    def give_answer(self, question, agent_num, round_num, json_data, failure_data, index):
         '''
             pre condition:
             need background, context without social group
@@ -928,7 +932,7 @@ class MultiAgentDebate:
 
 
     # 用于实验
-    def give_answer_test(self, question, agent_num, round_num, json, failure_data = None, extra_json = None) -> dict:
+    def give_answer_test(self, question, agent_num, round_num, json, failure_data = None, extra_json = None, index = -1) -> dict:
         # 这里根据不同想测试的东西配置real_question
         # 理论上你最多用得到question extra_json
         # 下面定义一些方法，方便你操作
@@ -1003,7 +1007,7 @@ class MultiAgentDebate:
 
     # 别人的方法
     # 传出一个列表 {agent_contexts: [], text_answer: chr}
-    def give_answer(self, question, agent_num, round_num, json, failure_data = None) -> dict:
+    def give_answer(self, question, agent_num, round_num, json, failure_data = None, index = -1) -> dict:
 
         # 将问题输入到multi-agent系统中
         # 获取答案
@@ -1027,7 +1031,11 @@ class MultiAgentDebate:
         question_prompt = """We seek to find the answer of ""{}"". \n{}""".format(question, CoT_induce_prompt)
 
         # 建造x个agents的消息存储
-        agent_contexts = [[{"role": "user", "content": question + config.global_prompt }] for agent in range(agents)]
+        if len(config.global_prompt) != 0:
+            agent_contexts = [[{"role": "user", "content": question + config.global_prompt }] for agent in range(agents)]
+        else:
+            question = MASKING_CONTEXT[index]
+            agent_contexts = [[{"role": "user", "content": question}] for agent in range(agents)]
         # [[{user}{agent1 answer}],
         # [{user}{agent2 answer}]]
 
@@ -1216,10 +1224,10 @@ class Benchmark:
             multi_agent = MultiAgent_class()
             try:
                 if not extra_jsons:
-                    answer_list[index] = multi_agent.give_answer(question, agent_num, round_num, self.test_set[index], failure_data)
+                    answer_list[index] = multi_agent.give_answer(question, agent_num, round_num, self.test_set[index], failure_data, index)
                 else:
                     answer_list[index] = multi_agent.give_answer_test(question, agent_num, round_num, self.test_set[index],
-                                                                 failure_data, extra_jsons[index])
+                                                                 failure_data, extra_jsons[index], index)
 
             except Exception as e:
                 print("Error in multi-agent system, this message comes from the run_multi_agent_concurrently function")
@@ -1383,6 +1391,9 @@ def generate_answer(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=
             if MODEL == 'llama3-8b-instruct':
                 response = send_request_to_Ali(messages)
                 return response, 0, 0
+            if MODEL == 'fgpt-3.5-turbo':
+                response = send_request_fast_api(messages)
+                return response, 0, 0
             elif MODEL != 'qwen-turbo':
                 # 生成50%概率
                 # MODEL = 'deepseek-chat'
@@ -1478,6 +1489,27 @@ def parse_answer(sentence) -> chr:
     return pre[-1]
 
 
+class Message:
+    def __init__(self, role, content):
+        self.role = role
+        self.content = content
+
+class Choice:
+    def __init__(self, index, message):
+        self.index = index
+        self.message = message
+
+class Completion:
+    def __init__(self, id, object, created, model, choices, usage, system_fingerprint):
+        self.id = id
+        self.object = object
+        self.created = created
+        self.model = model
+        self.choices = choices
+        self.usage = usage
+        self.system_fingerprint = system_fingerprint
+
+
 def send_request_fast_api(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=config.URL):
     try:
         conn = http.client.HTTPSConnection("api.chatanywhere.tech")
@@ -1487,7 +1519,7 @@ def send_request_fast_api(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY
             "temperature": 0,
         })
         headers = {
-            'Authorization': f'Bearer {API_KEY}',
+            'Authorization': f'Bearer {'sk-VPXWylHLcryLm4KPe0svfb5pOUyob8sTGUUdruUJ13bxqzRV'}',
             'User-Agent': 'Apifox/1.0.0 (https://apifox.com)',
             'Content-Type': 'application/json'
         }
@@ -1495,7 +1527,24 @@ def send_request_fast_api(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY
         res = conn.getresponse()
         data = res.read()
         json_data = json.loads(data)
-        return json_data
+
+        choices = []
+        for choice_data in json_data['choices']:
+            message = Message(role=choice_data['message']['role'], content=choice_data['message']['content'])
+            choice = Choice(index=choice_data['index'], message=message)
+            choices.append(choice)
+
+        completion = Completion(
+            id=json_data['id'],
+            object=json_data['object'],
+            created=json_data['created'],
+            model=json_data['model'],
+            choices=choices,
+            usage=json_data['usage'],
+            system_fingerprint=json_data.get('system_fingerprint', None)
+        )
+
+        return completion
     except Exception as e:
         raise e
 
@@ -1953,20 +2002,16 @@ if __name__ == '__main__':
     # NO_MASKING = True
     # print(len(MASKING_CONTEXT))
 
-    max_worker = 250
+    max_worker = 1
     threads = []
 
     model = "llama3_test"
 
-    qidong_no_mask(0, 3, max_worker, 'llama3-debias-ours', debiased_CoT_induce_prompt_our)
-    qidong_no_mask(0, 3, max_worker, 'llama3-debias-1', debiased_CoT_induce_prompt1)
-    qidong_no_mask(0, 3, max_worker, 'llama3-debias-2', debiased_CoT_induce_prompt2)
-    qidong_no_mask(0, 3, max_worker, 'llama3-debias-3', debiased_CoT_induce_prompt3)
-    qidong_no_mask(0, 3, max_worker, 'llama3-debias-4', debiased_CoT_induce_prompt4)
+
 
     # 注意denpendency保存位置
 
-    # start(0, 1, True, 'SES', 'SES.jsonl', max_worker, 8, -1, False, model)
+    start(3, 1, True, 'SES', 'SES.jsonl', max_worker, 8, 100, False, model)
     # MASKING_CONTEXT = {}
     # MASKING_NUM = {}
     # debias_CoT = debiased_CoT_induce_prompt_our

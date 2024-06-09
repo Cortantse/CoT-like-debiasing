@@ -1,8 +1,8 @@
 API_KEY44 = 'sk-uIcWCOCDabGWyn4z70Ad81E746304a98922eE7D75050Fd94'
 API_KEY4 = 'sk-5nYWyCJta7RrcjpuAcB126Bd05B449D38eAc10F735F0883f' # gpt4-o
 
-MODEL = 'llama3-8b-instruct'
-MODEL1 = 'fgpt-3.5-turbo'
+MODEL1 = 'llama3-8b-instruct'
+MODEL = 'fgpt-3.5-turbo'
 MODEL2 = 'gpt-4o'
 
 MODEL_deepseek = 'deepseek-chat'

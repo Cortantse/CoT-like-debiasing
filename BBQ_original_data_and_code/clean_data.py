@@ -1,6 +1,9 @@
+import http.client
+import json
 import re
-
+import config
 if __name__ == '__main__':
-    import torch
+    from Multi_Agent import send_request_fast_api
 
-    print(torch.__version__)  # 输出当前版本
+
+    print(send_request_fast_api([{'role': 'user', 'content': 'Hi'}]).choices[0].message.content)
