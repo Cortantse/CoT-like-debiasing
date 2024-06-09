@@ -36,9 +36,9 @@ s_example1_background_response_positive = {
     "differences_between_masked_and_unmasked": {
         f"People {aa}": f"In the unmasked context, (Ethiopian men) corresponds to (People {aa})",
     },
-    f"positive_words_for_both_{aa}": f"The positive words that could balance the image of People {aa} is [excellent and competent]",
+    f"positive_words_for_both_{aa}": f"The positive words that could balance the image of People {aa} is [affluent and competent]",
     "formatted_differences_between_masked_and_unmasked": {
-        f"People {aa}": f"People {aa} are [] Ethiopian men.",
+        f"People {aa}": f"People {aa} are [affluent and competent] Ethiopian men.",
     }
 }
 
@@ -58,7 +58,7 @@ s_example2_background_response_positive = {
     "differences_between_masked_and_unmasked": {
         f"Person {aa}": f"In the unmasked context, (producer) corresponds to (Person {aa})",
     },
-    f"positive_words_for_both_{aa}": f"The positive words that could balance the image of People {aa} is [excellent and competent]",
+    f"positive_words_for_both_{aa}": f"The positive words that could balance the image of People {aa} is [kind and friendly]",
     "formatted_differences_between_masked_and_unmasked": {
         f"Person {aa}": f"Person {aa} is a [] producer.",
     }
@@ -195,7 +195,7 @@ s_mask_asking = {
     "context": "",
     # "task": f"{mask_prompt}",
     "attributes_involved": "Please identify any attributes related to this text segment that might lead to bias.",
-    "context_masked": f"Please provide a modified version of this text to mask any attributes that could cause bias. Use placeholders like {aa}, {bb}, {cc}.",
+    "context_masked": f"Please provide a modified version of this text to mask any attributes that could cause bias. Use placeholders {aa}, {bb}, {cc}.",
 }
 
 s_mask_asking_with_task = {

@@ -56,12 +56,12 @@ DATA_LIST = []
 MASKING_CONTEXT = {}
 MASKING_NUM = [0]
 DEADLY_SIGNAL = False
-need_print_mask = False
+need_print_mask = True
 
 need_print_background = False
 NO_MASKING = False
 
-
+first_time = [True]
 
 class MaskSystem:
     def __init__(self, agents=None):
@@ -183,7 +183,12 @@ class MaskSystem:
 
         asking_question = mask_asking.copy()
         asking_question['context'] = question
-        messages.append({'role': 'user', 'content': json.dumps(asking_question)})
+        messages.append({'role': 'user', 'content': json.dumps(asking_question) + json_induce})
+
+        # if first_time[0]:
+        #     print(messages)
+        #     first_time[0] = False
+
 
         return messages
 
@@ -244,7 +249,7 @@ class MaskSystem:
         asking_question = background_asking_counterfactual.copy()
         asking_question['unmasked_context'] = unmasked_context
         asking_question['masked_context'] = masked_context
-        messages.append({'role': 'user', 'content': json.dumps(asking_question)})
+        messages.append({'role': 'user', 'content': json.dumps(asking_question) + json_induce})
 
         return messages
 
@@ -313,7 +318,7 @@ class MaskSystem:
         asking_question = background_asking_neutral.copy()
         asking_question['unmasked_context'] = unmasked_context
         asking_question['masked_context'] = masked_context
-        messages.append({'role': 'user', 'content': json.dumps(asking_question)})
+        messages.append({'role': 'user', 'content': json.dumps(asking_question) + json_induce})
 
         return messages
 
@@ -382,7 +387,7 @@ class MaskSystem:
         asking_question = background_asking.copy()
         asking_question['unmasked_context'] = unmasked_context
         asking_question['masked_context'] = masked_context
-        messages.append({'role': 'user', 'content': json.dumps(asking_question)})
+        messages.append({'role': 'user', 'content': json.dumps(asking_question) + json_induce})
 
         return messages
 
@@ -446,6 +451,7 @@ class MaskSystem:
 
         # 用于保存没有完全合格的答案
         context_list = []
+        failure = []
 
         for i in range(config.MAX_ITER_IN_MASK):
 
@@ -454,7 +460,7 @@ class MaskSystem:
                 token_fee[0] += single_token_fee
                 generate_token_fee[0] += single_generate_token_fee
                 context = completion.choices[0].message.content
-
+                failure.append(context)
                 masking_actual_usage[0] += 1
                 context = self.pre_process_json(context)
                 context = json.loads(context)
@@ -496,6 +502,13 @@ class MaskSystem:
         # 到这一块说明前面迭代次数耗尽了，还是无法获得X,Y >2的，那么会尽量选取XY最多的
         # choose as many points as possible
         max_points, max_index = 0, -1
+
+        if len(context_list) == 0:
+            print('no single background is given')
+            print(failure)
+            print('---ori---')
+            print(json_data)
+            raise Exception('no single background is given')
 
         for i, item in enumerate(context_list):
 
@@ -702,6 +715,7 @@ class MaskSystem:
     def give_answer_without_social_group(self, context_without_social_group, background, json) -> (str, str):
         messages = []
         messages.append({'role': 'user', 'content': background + '' +  context_without_social_group + CoT_induce_prompt})
+        failure = []
 
         # this background isn't important
 
@@ -712,6 +726,7 @@ class MaskSystem:
                 token_fee[0] += single_token_fee
                 generate_token_fee[0] += single_generate_token_fee
                 answer = completion.choices[0].message.content
+                failure.append(answer)
                 try:
                     parsed_answer = parse_answer(answer)
                 except:
@@ -732,7 +747,11 @@ class MaskSystem:
                 time.sleep(5)
                 continue
 
-        raise Exception(f"do not give an answer in 3 times at the last of give_answer_without_social_group")
+        print('answer are not given')
+        print(failure)
+        print('===ori====')
+        print(failure)
+        raise Exception(f"do not give an answer in 5 times at the last of give_answer_without_social_group")
 
     def processd_answer_later(self, question, json, answer):
         # no need now
@@ -1552,7 +1571,7 @@ def send_request_to_Ali(messages, need_print=False):
 
     private = 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/t2qxodon_cortantse'
 
-    url = "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/llama_3_8b?access_token=24.f7476dc1833e0164fde30b2a8cc76787.2592000.1720420511.282335-79973647"
+    url = "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/gmq6ujhr_cortantse?access_token=24.f7476dc1833e0164fde30b2a8cc76787.2592000.1720420511.282335-79973647"
     headers = {
         'Content-Type': 'application/json',
     }
@@ -1570,6 +1589,16 @@ def send_request_to_Ali(messages, need_print=False):
         if response.status_code == 200:
             # 解析JSON数据
             response_data = response.json()
+            # print(response_data)
+            try:
+                if bool(response_data['need_clear_history']) == True:
+                    print(response)
+                    print('===ori===')
+                    print(messages)
+            except Exception as e:
+                1 + 1
+
+
             if 'result' in response_data:
                 # 创建Message_实例
                 message_instance = Message_(role="assistant", content=response_data['result'])
@@ -1683,7 +1712,7 @@ def find_bracket_contents(text):
         raise ValueError("There should be exactly one [xxx] format in the text.")
 
 
-def start(start_idx: int, rounds: int, if_generate: bool, name: str, jsons_name: str, max_worker: int, base_num, test_num = -1, skipping_baseline = False, model_name = ""):
+def start(start_idx: int, rounds: int, if_generate: bool, name: str, jsons_name: str, max_worker: int, base_num, test_num = -1, skipping_baseline = False, model_name = "", debiased_CoT = debiased_CoT_induce_prompt_our):
     # rounds indicates generate num
     DEADLY_SIGNAL = False
 
@@ -1739,7 +1768,7 @@ def start(start_idx: int, rounds: int, if_generate: bool, name: str, jsons_name:
             X = MultiAgentDebate
             agent_num = 1
             round_num = 1
-            config.global_prompt = debiased_CoT_induce_prompt_our
+            config.global_prompt = debiased_CoT
 
             add = "debias_CoT"
         elif i% base_num == 3:
@@ -1896,9 +1925,21 @@ def replace_original_XY_to_first_character_and_second_character(text, first_char
     return text
 
 
+def qidong_no_mask(start_idx, base_num, workers, model, debias_CoT):
+    if start_idx > 2 or base_num > 3:
+        raise Exception("this function only works as baseline")
+    start(start_idx, 1, True, 'SES', 'SES.jsonl', max_worker, base_num, -1, False, model, debias_CoT)
+    start(start_idx, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, base_num, -1, False, model, debias_CoT)
+    start(start_idx, 1, True, 'Sexual_orientation', 'Sexual_orientation.jsonl', max_worker, base_num, -1, False, model, debias_CoT)
+    start(start_idx, 1, True, 'Age', 'Age.jsonl', max_worker, base_num, -1, False, model, debias_CoT)
+    start(start_idx, 1, True, 'Disability_status', 'Disability_status.jsonl', max_worker, base_num, -1, False, model, debias_CoT)
+    start(start_idx, 1, True, 'Nationality', 'Nationality.jsonl', max_worker, base_num, -1, False, model, debias_CoT)
+    start(start_idx, 1, True, 'Physical_appearance', 'Physical_appearance.jsonl', max_worker, base_num, -1, False, model, debias_CoT)
+    start(start_idx, 1, True, 'Religion', 'Religion.jsonl', max_worker, base_num, -1, False, model, debias_CoT)
+    start(start_idx, 1, True, 'Race_ethnicity', 'Race_ethnicity.jsonl', max_worker, base_num, -1, False, model, debias_CoT)
+
+
 if __name__ == '__main__':
-
-
 
     from sample import *
     import config
@@ -1912,68 +1953,49 @@ if __name__ == '__main__':
     # NO_MASKING = True
     # print(len(MASKING_CONTEXT))
 
-    max_worker = 10
+    max_worker = 250
     threads = []
 
     model = "llama3_test"
 
+    qidong_no_mask(0, 3, max_worker, 'llama3-debias-ours', debiased_CoT_induce_prompt_our)
+    qidong_no_mask(0, 3, max_worker, 'llama3-debias-1', debiased_CoT_induce_prompt1)
+    qidong_no_mask(0, 3, max_worker, 'llama3-debias-2', debiased_CoT_induce_prompt2)
+    qidong_no_mask(0, 3, max_worker, 'llama3-debias-3', debiased_CoT_induce_prompt3)
+    qidong_no_mask(0, 3, max_worker, 'llama3-debias-4', debiased_CoT_induce_prompt4)
 
     # 注意denpendency保存位置
-    start(0, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 8,  -1,False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'Sexual_orientation', 'Sexual_orientation.jsonl', max_worker, 8, -1, False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'Age', 'Age.jsonl', max_worker, 8,  -1,False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'Disability_status', 'Disability_status.jsonl', max_worker, 8,  -1,False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'Nationality', 'Nationality.jsonl', max_worker, 8,  -1,False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'Physical_appearance', 'Physical_appearance.jsonl', max_worker, 8, -1, False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'Religion', 'Religion.jsonl', max_worker, 8, -1, False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'Race_ethnicity', 'Race_ethnicity.jsonl', max_worker, 8, -1, False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'SES', 'SES.jsonl', max_worker, 8, -1, False, model)
 
-    #假如跑完了
-    start(0, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 8, -1, False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 8, -1, False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'Sexual_orientation', 'Sexual_orientation.jsonl', max_worker, 8, -1, False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'Age', 'Age.jsonl', max_worker, 8, -1, False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'Disability_status', 'Disability_status.jsonl', max_worker, 8, -1, False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'Nationality', 'Nationality.jsonl', max_worker, 8, -1, False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'Physical_appearance', 'Physical_appearance.jsonl', max_worker, 8, -1, False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'Religion', 'Religion.jsonl', max_worker, 8, -1, False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'Race_ethnicity', 'Race_ethnicity.jsonl', max_worker, 8, -1, False, model)
-    MASKING_CONTEXT = {}
-    MASKING_NUM = {}
-    start(0, 1, True, 'SES', 'SES.jsonl', max_worker, 8, -1, False, model)
+    # start(0, 1, True, 'SES', 'SES.jsonl', max_worker, 8, -1, False, model)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+    # debias_CoT = debiased_CoT_induce_prompt_our
+    # start(3, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 8, 100, False, model, debias_CoT)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+    # start(2, 1, True, 'Sexual_orientation', 'Sexual_orientation.jsonl', max_worker, 8, -1, False, model, debias_CoT)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+    # start(2, 1, True, 'Age', 'Age.jsonl', max_worker, 8, -1, False, model, debias_CoT)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+    # start(0, 1, True, 'Disability_status', 'Disability_status.jsonl', max_worker, 8, -1, False, model, debias_CoT)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+    # start(0, 1, True, 'Nationality', 'Nationality.jsonl', max_worker, 8, -1, False, model, debias_CoT)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+    # start(0, 1, True, 'Physical_appearance', 'Physical_appearance.jsonl', max_worker, 8, -1, False, model, debias_CoT)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+    # start(0, 1, True, 'Religion', 'Religion.jsonl', max_worker, 8, -1, False, model, debias_CoT)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+    # start(0, 1, True, 'Race_ethnicity', 'Race_ethnicity.jsonl', max_worker, 8, -1, False, model, debias_CoT)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+
+
 
 
 

@@ -45,18 +45,19 @@ def g():
 if  __name__ == '__main__':
     # 文件路径
     file_path5 = 'log/sample_1/4agents_0rounds_filtered_with_background_1_final_results_20240525-214307_test.pkl'
-    file_path = 'log/test_final_results_20240608-220212_stereoset_result.pkl'
+    file_path = 'log/1agents_1rounds_llama3_test_Age_debias_CoT_2_final_results_20240609-134639_test.pkl'
     # 读取数据
     with open(file_path, 'rb') as file:
         data_list = pickle.load(file)
 
     count = 0
-    # for item in data_list:
-    #     tem = item['answer']
-    #     if tem != 'A' and tem != 'B' and tem != 'C':
-    #         print('wrong answer exists')
-    #     else:
-    #         count += 1
+    for item in data_list:
+        tem = item['answer']
+        if tem != 'A' and tem != 'B' and tem != 'C':
+            print(tem)
+            print('wrong answer exists')
+        else:
+            count += 1
 
     print(count)
 
