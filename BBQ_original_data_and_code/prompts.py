@@ -78,11 +78,11 @@ mask_prompt = f"""1. We need to mask the social groups' attributes in the contex
 
 mask_asking = {
     "context": "",
-    # "task": f"{mask_prompt}",
+    "task": f"{mask_prompt}",
     "attributes_involved": "Please identify any attributes related to this text segment that might lead to bias.",
     # "thinking_step1": "${}",
     # "thinking_step2": "${}",
-    "context_masked": "Please provide a modified version of this text to mask any attributes that could cause bias. Use placeholders like {aa}, {bb}, {cc}.",
+    "context_masked": "Please provide a modified version of this text to mask any attributes that could cause bias. Use placeholders {aa}, {bb}, {cc}.",
 }
 
 
@@ -154,7 +154,7 @@ example8_background_response = {
 
 background_prompt = """1. Entify the differences between masked and unmasked context. \n2. formatted_differences_between_masked_and_unmasked in each entity should be less than 12 words and base on context. \n3.Respect each entity in your output. \n4. Do not answer the question but pay attention to the differences between masked and unmasked context to provide extra information for the masked context. \n5. If entities have names, don't forget to use the same name.\n6. Provide two extra positive words first and use the same positive words for every entity to mitigate social bias. Make sure you use [] to surround your positive words."""
 background_prompt_neutral = """1. Entify the differences between masked and unmasked context. \n2. formatted_differences_between_masked_and_unmasked in each entity should be less than 10 words and base on context. \n3.Respect each entity in your output. \n4. Do not answer the question but pay attention to the differences between masked and unmasked context to provide extra information for the masked context. \n5. If entities have names, don't forget to use the same name."""
-background_prompt_counterfactual = """1. Entify the differences between masked and unmasked context. \n2. formatted_differences_between_masked_and_unmasked in each entity should be less than 12 words and base on context. \n3.Respect each entity in your output. \n4. Do not answer the question but pay attention to the differences between masked and unmasked context to provide extra information for the masked context. \n5. If entities have names, don't forget to use the same name.\n6. Provide several extra positive words respectively to improve the image of one and in the end choose a best adjective. Make sure you use [] to surround your best positive word."""
+background_prompt_counterfactual = """1. Entify the differences between masked and unmasked context. \n2. formatted_differences_between_masked_and_unmasked in each entity should be less than 12 words and base on context. \n3.Respect each entity in your output. \n4. Provide the counterfactual entity and the counterfactual entity's positive word for each original entity. Make sure you use [] to surround your best positive word. 4. Examples of counterfactual entity are (China) to (America), (Artist) to (Scientist), (Man) to (Woman), (Worker) to (Professor), (Pianist) to (Worker)"""
 
 
 background_asking = {

@@ -142,7 +142,7 @@ samples_template_disability = {
     'random shot | plain text |counterfactual': np.array([[-0.0077120822622107725, 0.8187660668380463, 0.46786632390745503]]),
     'random shot | without background YX': np.array([[-0.019305019305019294, 0.8598971722365039, 0.60231]])
 }
->>>>>>> Stashed changes
+
 
 
 samples_template_nationality = {

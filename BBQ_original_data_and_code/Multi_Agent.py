@@ -431,22 +431,25 @@ class MaskSystem:
             if count < 2:
                 raise Exception(f"{word} should appear at least 2 times in the mask context")
 
-    def pre_process_json(self, str, extra_character_num = 0):
-        str_new = ""
+    def pre_process_json(self, input_str, extra_character_num=0):
+        # Find the index of the first opening brace
+        start_index = input_str.find('{')
+        # Find the index of the last closing brace
+        end_index = input_str.rfind('}')
 
+        # If either start_index or end_index is -1, the braces are not found
+        if start_index == -1 or end_index == -1:
+            raise Exception('json lacks {}')
 
+        # Extract the substring from the first opening brace to the last closing brace
+        processed_str = input_str[start_index:end_index + 1]
 
-        for idx, single_char in enumerate(str):
-            if single_char == '{':
-                while(str[idx]!='}' or extra_character_num != 0):
-                    if str[idx] == '}' and extra_character_num != 0:
-                        extra_character_num -= 1
-                    str_new += str[idx]
-                    idx += 1
-                str_new += '}'
-                return str_new
-        str = str
-        return str
+        # Check if extra characters need to be added and if they can be added
+        if extra_character_num > 0 and len(processed_str) + extra_character_num <= len(input_str):
+            # Append the specified number of extra characters from the original string after the last brace
+            processed_str += input_str[end_index + 1:end_index + 1 + extra_character_num]
+
+        return processed_str
 
 
     def give_mask_context(self, question, json_data, failure_data: []) -> str:
@@ -467,6 +470,8 @@ class MaskSystem:
                 failure.append(context)
                 masking_actual_usage[0] += 1
                 context = self.pre_process_json(context)
+
+                context = clean_string(str(context))
                 context = json.loads(context)
                 copy_context = context.copy()
                 context = context['context_masked']
@@ -665,6 +670,8 @@ class MaskSystem:
 
                 # 替换单引号，因为可能有格式问题
                 context = context.replace("""\'""", "")
+
+                context = clean_string(str(context))
                 context = json.loads(context)
 
                 context = context['formatted_differences_between_masked_and_unmasked']
@@ -792,8 +799,6 @@ class MaskSystem:
                     if config.REVERSE_X_Y:
                         context_without_social_group = replace_original_XY_to_first_character_and_second_character(context_without_social_group,
                                                                                                                'Y', 'X')
-
-
                 else:
                     MASKING_NUM[0] += 1
                     if NO_MASKING:
@@ -1016,15 +1021,6 @@ class MultiAgentDebate:
         agents = agent_num
         rounds = round_num
 
-        # role-play
-        group_a, group_b = return_group_a_and_group_b(json)
-        # 50 percent of chance to choose each group
-        group = ''
-        if random.random() < 0.5:
-            group = group_a
-        else:
-            group = group_b
-
         # prompt 设计 !!!!!!!!!!
 
         # 问题供后续使用，seek to find 强调了这是一个寻找的问题的过程
@@ -1036,6 +1032,7 @@ class MultiAgentDebate:
         else:
             question = MASKING_CONTEXT[index]
             agent_contexts = [[{"role": "user", "content": question}] for agent in range(agents)]
+
         # [[{user}{agent1 answer}],
         # [{user}{agent2 answer}]]
 
@@ -1391,7 +1388,7 @@ def generate_answer(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=
             if MODEL == 'llama3-8b-instruct':
                 response = send_request_to_Ali(messages)
                 return response, 0, 0
-            if MODEL == 'fgpt-3.5-turbo':
+            if MODEL == 'fgpt-3.5-turbo-0125':
                 response = send_request_fast_api(messages)
                 return response, 0, 0
             elif MODEL != 'qwen-turbo':
@@ -1409,18 +1406,27 @@ def generate_answer(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=
                 # else:
                 #     API_KEY = config.G_API_KEY3
 
-                URL = 'https://api.cpdd666.cn/v1'
-                pos = random.randint(0, 4)
+                # URL = 'https://api.cpdd666.cn/v1'
+                pos = random.randint(0, 7)
                 if pos == 0:
-                    API_KEY = 'sk-D6hJPt92vLvCzK5zA630C2153a154d9dA6A3Ca9dC55aE357'
+                    API_KEY = 'sk-IAQYNdlBlPllXF9RD66f2fEe50D447D19d8338A1096f287f'
                 elif pos == 1:
-                    API_KEY = 'sk-YWQxnxXORfx5Q792E4C3Db14E75347DbA4Ad1bD58021Ac47'
+                    API_KEY = 'sk-QNqsNQ6tidAmST833868F85c2eE4491dAbFb7f3685902aCc'
                 elif pos == 2:
-                    API_KEY = 'sk-8UaOPLahOU8XYqcj32889dCa09E643BbA35cB653517eD75a'
+                    API_KEY = 'sk-kcYZ32ZLcPdD8n4v464aCeDc20094a32AbFb9cEa2aA47375'
                 elif pos == 3:
-                    API_KEY = 'sk-PzgMMyEGYnUrzsuOA37e9b21Ac2e466c87D1C2058aD79b29'
+                    API_KEY = 'sk-nMiWNDD4CvFkvLUVE8D96aCbC9E64c4a9a0f465fA29f5d8b'
+                elif pos == 4:
+                    API_KEY = 'sk-UAtGSxQoCsSGGx40C4C3B40740Ea4034A8E637278dEb3338'
+                elif pos == 5:
+                    API_KEY = 'sk-dEMBkAfNj3hOr4Af7f44A6A460Be4169B59aD593CcB6B517'
+                elif pos == 6:
+                    API_KEY = 'sk-bSZocpevraON0OcB9bC90843Eb454c54B0C64786998e48E4'
                 else:
-                    API_KEY = 'sk-0gvNMVMDyMP6onLp2f0953416fAd423bB0Ef50627cF1E89c'
+                    API_KEY = 'sk-ptECB78XjDIUryNJ76B87f92A9F64809A300A452F37d104d'
+
+
+
 
 
 
@@ -1519,7 +1525,7 @@ def send_request_fast_api(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY
             "temperature": 0,
         })
         headers = {
-            'Authorization': f'Bearer {'sk-VPXWylHLcryLm4KPe0svfb5pOUyob8sTGUUdruUJ13bxqzRV'}',
+            'Authorization': f"Bearer {'sk-VPXWylHLcryLm4KPe0svfb5pOUyob8sTGUUdruUJ13bxqzRV'}",
             'User-Agent': 'Apifox/1.0.0 (https://apifox.com)',
             'Content-Type': 'application/json'
         }
@@ -1765,8 +1771,6 @@ def start(start_idx: int, rounds: int, if_generate: bool, name: str, jsons_name:
     # rounds indicates generate num
     DEADLY_SIGNAL = False
 
-
-
     for i in range(start_idx, base_num * rounds):
 
         if DEADLY_SIGNAL:
@@ -1941,10 +1945,247 @@ def start(start_idx: int, rounds: int, if_generate: bool, name: str, jsons_name:
     file_sys.save_content_in_binary(DATA_LIST)
     print(DATA_LIST)
 
+def start_with_files(start_idx: int, rounds: int, if_generate: bool, name: str, jsons_name: str, max_worker: int, base_num, test_num = -1, skipping_baseline = False, model_name = "", debiased_CoT = debiased_CoT_induce_prompt_our, files = []):
+    # rounds indicates generate num
+    DEADLY_SIGNAL = False
+
+
+
+    for i in range(start_idx, base_num * rounds):
+
+        if DEADLY_SIGNAL:
+            1/0
+            raise Exception("NONONONNO")
+
+
+        token_fee[0] = 0.0
+        generate_token_fee[0] = 0.0
+        dropping_num[0] = 0
+        definite_dropping_num[0] = 0
+        not_perfect_background_generation[0] = 0
+        not_perfect_context_masked[0] = 0
+        back_ground_actual_usage[0] = 0
+        masking_actual_usage[0] = 0
+        CoT_asking_actual_usage[0] = 0
+        bad_masking[0] = 0
+
+        agent_num = 1
+        round_num = 1
+        MAX_WORKER = max_worker
+        X = MaskSystem
+
+        config.BACK_GROUND_INDEX = 1
+        config.IF_BACKGROUND = True
+        add = ""
+
+
+        if i % base_num == 0:
+            print("entering baseline")
+            # baseline
+            X = MultiAgentDebate
+            agent_num = 1
+            round_num = 0
+            add = "baseline"
+        elif i % base_num == 1:
+            # pure CoT
+            print("entering pure Cot")
+            X = MultiAgentDebate
+            agent_num = 1
+            round_num = 1
+            config.global_prompt = CoT_induce_prompt
+
+            add = "pure_CoT"
+        elif i% base_num == 2:
+            # debias CoT
+            print("entering debias-CoT")
+            X = MultiAgentDebate
+            agent_num = 1
+            round_num = 1
+            config.global_prompt = debiased_CoT
+
+            add = "debias_CoT"
+        elif i% base_num == 3:
+            print("entering ran-pure-masking")
+            config.REVERSE_X_Y = False
+
+            # Without backgourd, pure masking
+            X = MultiAgentDebate
+            agent_num = 1
+            round_num = 1
+            config.global_prompt = ''
+            read_constructed_questions(files[0])
+
+            add = "ran_pure_masking"
+        elif i % base_num == 4:
+
+            print("entering ran_Positive")
+            config.REVERSE_X_Y = False
+
+            X = MultiAgentDebate
+            agent_num = 1
+            round_num = 1
+            config.global_prompt = ''
+            read_constructed_questions(files[1])
+
+            add = "ran_Positive"
+        elif i % base_num == 5:
+            print("entering ran_neutral")
+            config.REVERSE_X_Y = False
+
+            X = MultiAgentDebate
+            agent_num = 1
+            round_num = 1
+            config.global_prompt = ''
+            read_constructed_questions(files[2])
+            add = "ran_neutral"
+        elif i % base_num == 6:
+            print("entering counterfactual")
+            config.REVERSE_X_Y = False
+
+            X = MultiAgentDebate
+            agent_num = 1
+            round_num = 1
+            config.global_prompt = ''
+            read_constructed_questions(files[3])
+            add = "ran_counterfactual"
+        elif i % base_num == 7:
+            # continue
+            # X = MaskSystem
+            # BACK_GROUND_INDEX = 3
+            # MAX_ITER_IN_BACKGROUND = 2
+            # IF_COUNTERFACT = False
+            # add = "ran_positive_unfair"
+            # Without backgourd, pure masking
+            X = MultiAgentDebate
+            agent_num = 1
+            round_num = 1
+            config.global_prompt = ''
+            read_constructed_questions(files[4])
+            add = "ran_pure_masking_YX"
+        elif i % base_num == 8:
+            # 是否要测试不CoT？
+            continue
+            config.REVERSE_X_Y = False
+
+
+        ### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        prefix = f"""{agent_num}agents_{round_num}rounds_{model_name}_{name}_{add}_{i}_"""
+        if not if_generate:
+            prefix = f"""copy_{agent_num}agents_{round_num}rounds_{model_name}_{name}_{add}_{i}_"""
+
+        ### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        jsons = read_jsonl(f"BBQ_jsons\\{jsons_name}")
+        if test_num != -1:
+            # random.shuffle(jsons)
+            jsons = jsons[:test_num]
+
+        # 这里是获取已有的实验数据
+        # 定义文件匹配模式，'*' 代表任意多个字符
+        try:
+            ### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            pattern = f'logg\\{name}\\1agents_1rounds_{model_name}_{name}_{add}*final_results_*_test.pkl'
+
+            if skipping_baseline and i % base_num < 3:
+                continue
+
+            if i % base_num < 3 or if_generate:
+                if not if_generate:
+                    continue
+
+                raise Exception("out")
+
+            # 使用 glob.glob() 查找所有匹配的文件
+            files = glob.glob(pattern)
+
+            with open(files[i // base_num], 'rb') as file:
+                # !!!!!!!
+                extra_jsons = pickle.load(file)
+
+            X = MultiAgentDebate
+        except Exception as e:
+            if i % base_num >= 3:
+                print("warning, using high-cost methods")
+            extra_jsons = None
+            print(e)
+
+        bench = Benchmark(jsons, X)
+
+        log_name = 'test'
+
+        """
+        agent = 1 round_num = 888 表示debate
+        agent = 1 round_num = 0 表示直接采样，baseline
+        agent = 1 round_num = 1 表示单次采样，有CoT
+        agent > 1 round_num = 1 表示多次采样，Self-consistency CoT
+        agent = 1 round_num > 1 表示单次采样后进行self-reflect
+        agent = 2 round_num = 1 表示advice
+        agent = 4 round_num = 0 indicates masking strategies
+        """
+        try:
+            bench.run_benchmark(log_name=log_name, agent_num=agent_num, round_num=round_num, max_worker=MAX_WORKER, prefix=prefix, extra_jsons=extra_jsons)
+        except:
+            DEADLY_SIGNAL = True
+
+        print(DATA_LIST)
+
+    ### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    file_sys = FileSystem(f"data_{name}_Status", prefix="saving")
+    file_sys.save_content_in_binary(DATA_LIST)
+    print(DATA_LIST)
+
+def start_with_SM(start_idx: int, rounds: int, if_generate: bool, name: str, jsons_name: str, max_worker: int, base_num, test_num = -1, skipping_baseline = False, model_name = ""):
+    # rounds indicates generate num
+    DEADLY_SIGNAL = False
+
+    token_fee[0] = 0.0
+    generate_token_fee[0] = 0.0
+    dropping_num[0] = 0
+    definite_dropping_num[0] = 0
+    not_perfect_background_generation[0] = 0
+    not_perfect_context_masked[0] = 0
+    back_ground_actual_usage[0] = 0
+    masking_actual_usage[0] = 0
+    CoT_asking_actual_usage[0] = 0
+    bad_masking[0] = 0
+
+    agent_num = 2
+    round_num = 3
+    MAX_WORKER = max_worker
+    X = MultiAgentDebate
+    config.global_prompt = CoT_induce_prompt
+    ### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    prefix = f"""{agent_num}agents_{round_num}rounds_{model_name}_{name}_"""
+
+    ### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    jsons = read_jsonl(f"BBQ_jsons\\{jsons_name}")
+
+    bench = Benchmark(jsons, X)
+
+    log_name = 'test'
+    bench.run_benchmark(log_name=log_name, agent_num=agent_num, round_num=round_num, max_worker=MAX_WORKER, prefix=prefix)
+
+
+
+
+
+
+def read_constructed_questions(file_path: str):
+    jsons = []
+    MASKING_CONTEXT.clear()
+    with open(file_path, 'rb') as file:
+        jsons = pickle.load(file)
+
+    for item in jsons:
+        back = item['rationale'][1]['content']
+        back = str(back)
+        MASKING_CONTEXT[item['index']] = back
 
 
 def read_mask(file_path: str):
     jsons = []
+    MASKING_CONTEXT.clear()
     with open(file_path, 'rb') as file:
         jsons = pickle.load(file)
 
@@ -1956,6 +2197,19 @@ def read_mask(file_path: str):
         back = back.split('Let')
         back = back[0]
         MASKING_CONTEXT[item['index']] = back
+
+def clean_string(input_string):
+    # 用正则表达式找到所有被双引号包围的字符串
+    quoted_strings = re.findall(r'"[^"]*"', input_string)
+
+    # 将字符串中的 \n 和 \t 替换为空，除非它们在双引号中
+    cleaned_string = re.sub(r'(?<!")(\n|\t)(?!")', '', input_string)
+
+    # 将先前保存的双引号内字符串替换回去，保留原格式
+    for quoted in quoted_strings:
+        cleaned_string = cleaned_string.replace(quoted.replace('\n', '').replace('\t', ''), quoted)
+
+    return cleaned_string
 
 
 def replace_special_characters(text, target, replacement):
@@ -1988,6 +2242,13 @@ def qidong_no_mask(start_idx, base_num, workers, model, debias_CoT):
     start(start_idx, 1, True, 'Race_ethnicity', 'Race_ethnicity.jsonl', max_worker, base_num, -1, False, model, debias_CoT)
 
 
+def chang_files(f: []):
+    for i in range(f):
+        f[i] = 'reload_our_methods\\' + f[i]
+        read_constructed_questions(f[i])
+        print(len(MASKING_CONTEXT))
+
+
 if __name__ == '__main__':
 
     from sample import *
@@ -2006,39 +2267,140 @@ if __name__ == '__main__':
     threads = []
 
     model = "llama3_test"
+    debias_CoT = ''
+
+    # files1 = [
+    #     "1agents_1rounds_gpt_SES_ran_pure_masking_3_final_results_20240605-150250_test.pkl",
+    #     "1agents_1rounds_gpt_SES_ran_Positive_4_final_results_20240605-161206_test.pkl",
+    #     "1agents_1rounds_gpt_SES_ran_neutral_5_final_results_20240605-165732_test.pkl",
+    #     "1agents_1rounds_gpt_SES_ran_counterfactual_6_final_results_20240605-180517_test.pkl",
+    #     "1agents_1rounds_gpt_SES_ran_pure_masking_YX_7_final_results_20240605-183828_test.pkl"
+    # ]
+    # files2 = [
+    #     "1agents_1rounds_gpt_Gender_identity_ran_pure_masking_3_final_results_20240606-021440_test.pkl",
+    #     "1agents_1rounds_gpt_Gender_identity_ran_Positive_4_final_results_20240606-025844_test.pkl",
+    #     "1agents_1rounds_gpt_Gender_identity_ran_neutral_5_final_results_20240606-035912_test.pkl",
+    #     "1agents_1rounds_gpt_Gender_identity_ran_counterfactual_6_final_results_20240606-043733_test.pkl",
+    #     "1agents_1rounds_gpt_Gender_identity_ran_pure_masking_YX_7_final_results_20240606-044937_test.pkl"
+    # ]
+    #
+    # files3 = [
+    #     "1agents_1rounds_gpt_Sexual_orientation_ran_pure_masking_3_final_results_20240606-050758_test.pkl",
+    #     "1agents_1rounds_gpt_Sexual_orientation_ran_Positive_4_final_results_20240606-051346_test.pkl",
+    #     "1agents_1rounds_gpt_Sexual_orientation_ran_neutral_5_final_results_20240606-052241_test.pkl",
+    #     "1agents_1rounds_gpt_Sexual_orientation_ran_counterfactual_6_final_results_20240606-052554_test.pkl",
+    #     "1agents_1rounds_gpt_Sexual_orientation_ran_pure_masking_YX_7_final_results_20240606-053804_test.pkl"
+    # ]
+    #
+    # files4 = [
+    #     "1agents_1rounds_gpt_Age_ran_pure_masking_3_final_results_20240606-065526_test.pkl",
+    #     "1agents_1rounds_gpt_Age_ran_Positive_4_final_results_20240606-071722_test.pkl",
+    #     "1agents_1rounds_gpt_Age_ran_neutral_5_final_results_20240606-073617_test.pkl",
+    #     "1agents_1rounds_gpt_Age_ran_counterfactual_6_final_results_20240606-080127_test.pkl",
+    #     "1agents_1rounds_gpt_Age_ran_pure_masking_YX_7_final_results_20240606-081301_test.pkl"
+    # ]
+    #
+    # files5 = [
+    #     "1agents_1rounds_gpt_Disability_status_ran_pure_masking_3_final_results_20240605-000947_test.pkl",
+    #     "1agents_1rounds_gpt_Disability_status_ran_Positive_4_final_results_20240605-001441_test.pkl",
+    #     "1agents_1rounds_gpt_Disability_status_ran_neutral_5_final_results_20240605-002448_test.pkl",
+    #     "1agents_1rounds_gpt_Disability_status_ran_counterfactual_6_final_results_20240605-002938_test.pkl",
+    #     "1agents_1rounds_gpt_Disability_status_ran_pure_masking_YX_7_final_results_20240605-003304_test.pkl"
+    # ]
+    #
+    # files6 = [
+    #     "1agents_1rounds_gpt_Nationality_ran_pure_masking_3_final_results_20240605-010527_test.pkl",
+    #     "1agents_1rounds_gpt_Nationality_ran_Positive_4_final_results_20240605-012602_test.pkl",
+    #     "1agents_1rounds_gpt_Nationality_ran_neutral_5_final_results_20240605-014232_test.pkl",
+    #     "1agents_1rounds_gpt_Nationality_ran_counterfactual_6_final_results_20240605-015916_test.pkl",
+    #     "1agents_1rounds_gpt_Nationality_ran_pure_masking_Yx_7_final_results_20240605-021325_test.pkl"
+    # ]
+    #
+    # files7 = [
+    #     "1agents_1rounds_gpt_Religion_ran_pure_masking_3_final_results_20240605-081750_test.pkl",
+    #     "1agents_1rounds_gpt_Religion_ran_Positive_4_final_results_20240605-082433_test.pkl",
+    #     "1agents_1rounds_gpt_Religion_ran_neutral_5_final_results_20240605-082954_test.pkl",
+    #     "1agents_1rounds_gpt_Religion_ran_counterfactual_6_final_results_20240605-083616_test.pkl",
+    #     "1agents_1rounds_gpt_Religion_ran_pure_masking_YX_7_final_results_20240605-084026_test.pkl"
+    # ]
+    #
+    # files8 = [
+    #     "1agents_1rounds_gpt_Race_ethnicity_ran_pure_masking_3_final_results_20240605-102935_test.pkl",
+    #     "1agents_1rounds_gpt_Race_ethnicity_ran_Positive_4_final_results_20240605-110855_test.pkl",
+    #     "1agents_1rounds_gpt_Race_ethnicity_ran_neutral_5_final_results_20240605-112949_test.pkl",
+    #     "1agents_1rounds_gpt_Race_ethnicity_ran_counterfactual_6_final_results_20240605-115958_test.pkl",
+    #     "1agents_1rounds_gpt_Race_ethnicity_ran_pure_masking_YX_7_final_results_20240605-121308_test.pkl"
+    # ]
+    #
+    # chang_files(files1)
+    # chang_files(files2)
+    # chang_files(files3)
+    # chang_files(files4)
+    # chang_files(files5)
+    # chang_files(files6)
+    # chang_files(files7)
+    # chang_files(files8)
 
 
 
-    # 注意denpendency保存位置
+    # start_with_files(3, 1, True, 'SES', 'SES.jsonl', max_worker, 8, -1, False, model, debias_CoT, files1)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+    # start_with_files(3, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 8, -1, False, model, debias_CoT, files2)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+    # start_with_files(3, 1, True, 'Sexual_orientation', 'Sexual_orientation.jsonl', max_worker, 8, -1, False, model, debias_CoT, files3)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+    # start_with_files(3, 1, True, 'Age', 'Age.jsonl', max_worker, 8, -1, False, model, debias_CoT, files4)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+    # start_with_files(3, 1, True, 'Disability_status', 'Disability_status.jsonl', max_worker, 8, -1, False, model, debias_CoT, files5)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+    # start_with_files(3, 1, True, 'Nationality', 'Nationality.jsonl', max_worker, 8, -1, False, model, debias_CoT, files6)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+    # start_with_files(3, 1, True, 'Religion', 'Religion.jsonl', max_worker, 8, -1, False, model, debias_CoT, files7)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
+    # start_with_files(3, 1, True, 'Race_ethnicity', 'Race_ethnicity.jsonl', max_worker, 8, -1, False, model, debias_CoT, files8)
+    # MASKING_CONTEXT = {}
+    # MASKING_NUM = {}
 
-    start(3, 1, True, 'SES', 'SES.jsonl', max_worker, 8, 100, False, model)
-    # MASKING_CONTEXT = {}
-    # MASKING_NUM = {}
-    # debias_CoT = debiased_CoT_induce_prompt_our
-    # start(3, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, 8, 100, False, model, debias_CoT)
-    # MASKING_CONTEXT = {}
-    # MASKING_NUM = {}
-    # start(2, 1, True, 'Sexual_orientation', 'Sexual_orientation.jsonl', max_worker, 8, -1, False, model, debias_CoT)
-    # MASKING_CONTEXT = {}
-    # MASKING_NUM = {}
-    # start(2, 1, True, 'Age', 'Age.jsonl', max_worker, 8, -1, False, model, debias_CoT)
-    # MASKING_CONTEXT = {}
-    # MASKING_NUM = {}
-    # start(0, 1, True, 'Disability_status', 'Disability_status.jsonl', max_worker, 8, -1, False, model, debias_CoT)
-    # MASKING_CONTEXT = {}
-    # MASKING_NUM = {}
-    # start(0, 1, True, 'Nationality', 'Nationality.jsonl', max_worker, 8, -1, False, model, debias_CoT)
-    # MASKING_CONTEXT = {}
-    # MASKING_NUM = {}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     # start(0, 1, True, 'Physical_appearance', 'Physical_appearance.jsonl', max_worker, 8, -1, False, model, debias_CoT)
     # MASKING_CONTEXT = {}
     # MASKING_NUM = {}
-    # start(0, 1, True, 'Religion', 'Religion.jsonl', max_worker, 8, -1, False, model, debias_CoT)
+
     # MASKING_CONTEXT = {}
     # MASKING_NUM = {}
-    # start(0, 1, True, 'Race_ethnicity', 'Race_ethnicity.jsonl', max_worker, 8, -1, False, model, debias_CoT)
-    # MASKING_CONTEXT = {}
-    # MASKING_NUM = {}
+    # debias_CoT = debiased_CoT_induce_prompt_our
+
 
 
 

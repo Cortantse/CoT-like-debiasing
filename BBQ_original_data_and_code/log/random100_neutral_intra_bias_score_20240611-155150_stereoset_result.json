@@ -1,0 +1,17 @@
+{
+    "ss": 60.10016694490818,
+    "lms": 94.65776293823038,
+    "icat": 75.536578772077,
+    "token_fee": 2.1873120000000013,
+    "generate_token_fee": 0.060251999999999965,
+    "dropping_num": 1,
+    "imperfect_mask": 0,
+    "no_background(pure masking)": 2484,
+    "actual_asking_for_answer": 612,
+    "Masking_actual_usage": 0,
+    "rechecked_dropping": 1,
+    "back_ground_actual_usage": 255,
+    "bad_background(not good but still have)": 0,
+    "not_perfect_background_generation": 12,
+    "no_mask": 0
+}
