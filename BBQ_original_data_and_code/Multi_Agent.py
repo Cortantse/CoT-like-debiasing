@@ -184,7 +184,7 @@ class MaskSystem:
         asking_question = mask_asking.copy()
         asking_question['context'] = question
         messages.append({'role': 'user', 'content': json.dumps(asking_question) })
-        messages.append({'role': 'user', 'content': "Please output in json format."})
+        # messages.append({'role': 'user', 'content': "Please output in json format."})
 
         # if first_time[0]:
         #     print(messages)
@@ -1386,7 +1386,9 @@ def generate_answer(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=
         try:
             singe_token_fee, single_generate_token_fee = 0.0, 0.0
             if MODEL == 'llama3-8b-instruct':
-                response = send_request_to_Ali(messages)
+                response, singe_token_fee, single_generate_token_fee = send_request(messages, 'meta-llama/Meta-Llama-3-8B-Instruct', 'CAswsGvM4A4xGqb9lZ9gWzIjXwXRSwjc', 'https://api.deepinfra.com/v1/openai')
+                # response = send_request_to_Ali(messages)
+                # print(response.choices[0].message.content)
                 return response, 0, 0
             if MODEL == 'fgpt-3.5-turbo-0125':
                 response = send_request_fast_api(messages)
@@ -1455,6 +1457,7 @@ def generate_answer(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=
         except Exception as e:
             # Log the exception if needed
             retries += 1
+            print(e)
 
 
             if retries > 20:
@@ -1607,14 +1610,14 @@ def send_request(messages, MODEL=config.MODEL, API_KEY=config.G_API_KEY, URL=con
         temperature=config.TEMPERATURE,
     )
 
-    try:
-        # 计算请求消息的 token 费用
-        input_tokens_fee = sum(count_tokens_fee(msg['content'], if_input = True) for msg in messages)
-        token_fee_shadow += input_tokens_fee  # 更新全局 token 费用
-        token_fee_shadow += count_tokens_fee(completion.choices[0].message.content, if_input = False)
-        generate_token_fee_shadow = count_tokens_fee(completion.choices[0].message.content, if_input = False)
-    except:
-        raise Exception("token_fee error")
+    # try:
+    #     # 计算请求消息的 token 费用
+    #     input_tokens_fee = sum(count_tokens_fee(msg['content'], if_input = True) for msg in messages)
+    #     token_fee_shadow += input_tokens_fee  # 更新全局 token 费用
+    #     token_fee_shadow += count_tokens_fee(completion.choices[0].message.content, if_input = False)
+    #     generate_token_fee_shadow = count_tokens_fee(completion.choices[0].message.content, if_input = False)
+    # except:
+    #     raise Exception("token_fee error")
     return completion, token_fee_shadow, generate_token_fee_shadow
 
 
@@ -2263,11 +2266,29 @@ if __name__ == '__main__':
     # NO_MASKING = True
     # print(len(MASKING_CONTEXT))
 
-    max_worker = 1
+    max_worker = 100
+    start_idx = 1
+    base_num = 1
     threads = []
 
     model = "llama3_test"
     debias_CoT = ''
+
+
+
+    start(3, 1, True, 'Physical_appearance', 'Physical_appearance.jsonl', max_worker, 8, -1, False)
+
+    # start_with_SM(start_idx, 1, True, 'SES', 'SES.jsonl', max_worker, base_num, -1, False, model)
+    # start_with_SM(start_idx, 1, True, 'Gender_identity', 'Gender_identity.jsonl', max_worker, base_num, -1, False, model)
+    # start_with_SM(start_idx, 1, True, 'Sexual_orientation', 'Sexual_orientation.jsonl', max_worker, base_num, -1, False, model)
+    # start_with_SM(start_idx, 1, True, 'Age', 'Age.jsonl', max_worker, base_num, -1, False, model)
+    # start_with_SM(start_idx, 1, True, 'Disability_status', 'Disability_status.jsonl', max_worker, base_num, -1, False, model)
+    # start_with_SM(start_idx, 1, True, 'Nationality', 'Nationality.jsonl', max_worker, base_num, -1, False, model)
+    # start_with_SM(start_idx, 1, True, 'Physical_appearance', 'Physical_appearance.jsonl', max_worker, base_num, -1, False, model)
+    # start_with_SM(start_idx, 1, True, 'Religion', 'Religion.jsonl', max_worker, base_num, -1, False, model)
+    # start_with_SM(start_idx, 1, True, 'Race_ethnicity', 'Race_ethnicity.jsonl', max_worker, base_num, -1, False, model)
+
+
 
     # files1 = [
     #     "1agents_1rounds_gpt_SES_ran_pure_masking_3_final_results_20240605-150250_test.pkl",

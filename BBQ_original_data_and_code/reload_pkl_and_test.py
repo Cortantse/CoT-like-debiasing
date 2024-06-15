@@ -53,7 +53,7 @@ def x():
 if  __name__ == '__main__':
     # 文件路径
     file_path5 = 'log/sample_1/4agents_0rounds_filtered_with_background_1_final_results_20240525-214307_test.pkl'
-    file_path = 'log/testcounterfactual_intra_final_results_20240611-151819_stereoset_result.pkl'
+    file_path = 'log/debias_ours_masking_intra_final_results_20240614-002939_stereoset_result.pkl'
     # 读取数据
     with open(file_path, 'rb') as file:
         data_list = pickle.load(file)

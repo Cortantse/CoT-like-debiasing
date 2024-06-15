@@ -1,5 +1,6 @@
 
 import json
+import math
 import random
 import re
 import threading
@@ -475,6 +476,7 @@ class Benchmark:
             messages = self.initialize_background_context_inter(unmasked_context, masked_context, background_type)
 
 
+
         for i in range(config.MAX_ITER_IN_BACKGROUND):
             try:
                 completion, single_token_fee, single_generate_token_fee = Multi_Agent.generate_answer(messages)
@@ -866,18 +868,16 @@ class Benchmark:
 
         for word in word_list:
             count = context.count(word)
-            if count == 0:
-                points += 1
-            elif count == 1:
+            if count == 1:
                 points += 0.1
             elif count == 2:
                 points += 0.5
             elif count == 3:
                 points += 1
-            elif count == 4:
-                points += 1.5
-            else:
-                points += 1.5 - 0.25*(count - 4)
+            elif count > 3:
+                points += 2 + (count - 4)
+
+
         context_list.append((points, context))
 
         if points == 0:
@@ -1027,16 +1027,7 @@ class Benchmark:
 
     def initialize_background_context_inter(self, unmasked_context, masked_context, background_type):
         messages = []
-        # 看几个：
-        word_list = [r'\bX\b', r'\bY\b', r'\bZ\b']
-
-        # Check if 'X', 'Y', 'Z' are in the masked_context
-        if_have_xx_yy_zz = [bool(re.search(word, masked_context)) for word in word_list]
-
-        count = 0
-        for item in if_have_xx_yy_zz:
-            if item:
-                count += 1
+        count = self.count_masked_entities(masked_context)
 
         # 根据background type
         if background_type == 1:
@@ -1047,11 +1038,26 @@ class Benchmark:
             example3_background_response = inter_s_example3_background_response
             example4_background_response = inter_s_example4_background_response
             example5_background_response = inter_s_example5_background_response
-            example6_background_response = inter_s_example6_background_response
-            example7_background_response = inter_s_example7_background_response
-
-
-
+            example7_background_response = inter_s_example6_background_response
+            example8_background_response = inter_s_example7_background_response
+        elif background_type == 2:
+            background_asking = background_asking_postive
+            example1_background_response = inter_s_example1_background_response_positive
+            example2_background_response = inter_s_example2_background_response_positive
+            example3_background_response = inter_s_example3_background_response_positive
+            example4_background_response = inter_s_example4_background_response_positive
+            example5_background_response = inter_s_example5_background_response_positive
+            example7_background_response = inter_s_example6_background_response_positive
+            example8_background_response = inter_s_example7_background_response_positive
+        else:
+            background_asking = background_asking_counterfactual
+            example1_background_response = inter_s_example1_background_response_counterfactual
+            example2_background_response = inter_s_example2_background_response_counterfactual
+            example3_background_response = inter_s_example3_background_response_counterfactual
+            example4_background_response = inter_s_example4_background_response_counterfactual
+            example5_background_response = inter_s_example5_background_response_counterfactual
+            example7_background_response = inter_s_example6_background_response_counterfactual
+            example8_background_response = inter_s_example7_background_response_counterfactual
 
         # 选择example
         example1_background_unmasked_context = inter_s_example1_context
@@ -1069,39 +1075,53 @@ class Benchmark:
         example5_background_unmasked_context = inter_s_example5_context
         example5_background_masked_context = inter_s_example5_context_masked
 
-        example6_background_unmasked_context = inter_s_example6_context
-        example6_background_masked_context = inter_s_example6_context_masked
+        example7_background_unmasked_context = inter_s_example6_context
+        example7_background_masked_context = inter_s_example6_context_masked
 
-        example7_background_unmasked_context = inter_s_example7_context
-        example7_background_masked_context = inter_s_example7_context_masked
+        example8_background_unmasked_context = inter_s_example7_context
+        example8_background_masked_context = inter_s_example7_context_masked
 
-        example1_question = background_asking.copy()
+        example1_question = background_asking[self.count_masked_entities(example1_background_masked_context) - 1].copy()
         example1_question['unmasked_context'] = example1_background_unmasked_context
         example1_question['masked_context'] = example1_background_masked_context
+        example1_question['tips'] = example1_question['tips'].format(
+            self.return_format(self.count_masked_entities(example1_background_masked_context)))
 
-        example2_question = background_asking.copy()
+        example2_question = background_asking[self.count_masked_entities(example2_background_masked_context) - 1].copy()
         example2_question['unmasked_context'] = example2_background_unmasked_context
         example2_question['masked_context'] = example2_background_masked_context
+        example2_question['tips'] = example2_question['tips'].format(
+            self.return_format(self.count_masked_entities(example2_background_masked_context)))
 
-        example3_question = background_asking.copy()
+        example3_question = background_asking[self.count_masked_entities(example3_background_masked_context) - 1].copy()
         example3_question['unmasked_context'] = example3_background_unmasked_context
         example3_question['masked_context'] = example3_background_masked_context
+        example3_question['tips'] = example3_question['tips'].format(
+            self.return_format(self.count_masked_entities(example3_background_masked_context)))
 
-        example4_question = background_asking.copy()
+        example4_question = background_asking[self.count_masked_entities(example4_background_masked_context) - 1].copy()
         example4_question['unmasked_context'] = example4_background_unmasked_context
         example4_question['masked_context'] = example4_background_masked_context
+        example4_question['tips'] = example4_question['tips'].format(
+            self.return_format(self.count_masked_entities(example4_background_masked_context)))
 
-        example5_question = background_asking.copy()
+        example5_question = background_asking[self.count_masked_entities(example5_background_masked_context) - 1].copy()
         example5_question['unmasked_context'] = example5_background_unmasked_context
         example5_question['masked_context'] = example5_background_masked_context
+        example5_question['tips'] = example5_question['tips'].format(
+            self.return_format(self.count_masked_entities(example5_background_masked_context)))
 
-        example6_question = background_asking.copy()
-        example6_question['unmasked_context'] = example6_background_unmasked_context
-        example6_question['masked_context'] = example6_background_masked_context
-
-        example7_question = background_asking.copy()
+        example7_question = background_asking[self.count_masked_entities(example7_background_masked_context) - 1].copy()
         example7_question['unmasked_context'] = example7_background_unmasked_context
         example7_question['masked_context'] = example7_background_masked_context
+        example7_question['tips'] = example7_question['tips'].format(
+            self.return_format(self.count_masked_entities(example7_background_masked_context)))
+
+        example8_question = background_asking[self.count_masked_entities(example8_background_masked_context) - 1].copy()
+        example8_question['unmasked_context'] = example8_background_unmasked_context
+        example8_question['masked_context'] = example8_background_masked_context
+        example8_question['tips'] = example8_question['tips'].format(
+            self.return_format(self.count_masked_entities(example8_background_masked_context)))
 
         messages_list = []
         messages_list.append((example1_question, example1_background_response))
@@ -1109,8 +1129,8 @@ class Benchmark:
         messages_list.append((example3_question, example3_background_response))
         messages_list.append((example4_question, example4_background_response))
         messages_list.append((example5_question, example5_background_response))
-        messages_list.append((example6_question, example6_background_response))
-        messages_list.append((example7_question, example7_background_response))
+        # messages_list.append((example7_question, example7_background_response))
+        messages_list.append((example8_question, example8_background_response))
 
         random.shuffle(messages_list)
 
@@ -1118,7 +1138,11 @@ class Benchmark:
             messages.append({'role': 'user', 'content': json.dumps(item[0])})
             messages.append({'role': 'assistant', 'content': json.dumps(item[1])})
 
-        asking_question = background_asking.copy()
+        messages.append({'role': 'user', 'content': json.dumps(example7_question)})
+        messages.append({'role': 'assistant', 'content': json.dumps(example7_background_response)})
+
+        asking_question = background_asking[count - 1].copy()
+        asking_question['tips'] = asking_question['tips'].format(self.return_format(count))
         asking_question['unmasked_context'] = unmasked_context
         asking_question['masked_context'] = masked_context
         messages.append({'role': 'user', 'content': json.dumps(asking_question)})
@@ -1342,49 +1366,40 @@ if __name__ == '__main__':
 
     ONLY_NEED_MASK = False
 
-    random.shuffle(data['data']['intrasentence'])
 
     # 只对这里做修改
     from prompts import debiased_CoT_induce_prompt_our as dd
-    prompt_using = dd
 
-    if_mask = False
-    if_background = False
-    config.BACK_GROUND_INDEX = -1
     # 1 是neutral 2 是positive 3是counterfactual
 
 
-    testing = 'intrasentence'
+    testing = 'intersentence'
+    # 修改这个！！！！！！！！！！
+    prompt_using = CoT_induce_prompt
+    prefix = """llama_inter"""
 
-    prefix = """debias_ours_"""
+    max_worker = 200
+    print(len(data['data'][testing]))
+    # run_a_round(if_background, if_mask, max_worker, prefix, prompt_using, testing)
 
-    max_worker = 80
-    run_a_round(if_background, if_mask, max_worker, prefix, prompt_using, testing)
+    if_intra = None
+    if testing == 'intersentence':
+        if_intra = False
+    elif testing == 'intrasentence':
+        if_intra = True
+    else:
+        raise Exception('in valid testing type')
 
-    # random.shuffle(data['data'][testing])
-
-    # if_intra = None
-    # if testing == 'intersentence':
-    #     if_intra = False
-    # elif testing == 'intrasentence':
-    #     if_intra = True
-    # else:
-    #     raise Exception('in valid testing type')
-    # if global_background_index != -1 and if_background == False:
-    #     raise Exception("if background is False, background index should be -1")
-    #
-    #
-    # benchmark = Benchmark(data['data'][testing][:100], prompt_using, if_intra)
+    run_our_methods(prefix, max_worker, testing)
     #
     # # 禁止对benchmark.constructed_question进行 random 操作， 会破坏数据结构！！！！！！！ 同时，只能在6倍数区间采样，否咋会卡死进程
     # # 除非你不想要统计数据
-    # # for i in range(10):
-    # #     print(benchmark.constructed_question[i])
+    # for i in range(10):
+    #     print(benchmark.constructed_question[i])
     # if not if_mask:
     #     if if_background:
     #         raise Exception('enabling background without masking is not allowed')
     #
-    # benchmark.run_benchmark(if_mask, if_background, max_worker, prefix)
 
 
 

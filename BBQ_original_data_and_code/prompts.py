@@ -82,7 +82,7 @@ mask_asking = {
     "attributes_involved": "Please identify any attributes related to this text segment that might lead to bias.",
     # "thinking_step1": "${}",
     # "thinking_step2": "${}",
-    "context_masked": "Please provide a modified version of this text to mask any attributes that could cause bias. Use placeholders {aa}, {bb}, {cc}.",
+    "context_masked": f"Please provide a modified version of this text to mask any attributes that could cause bias. Use placeholders {aa}, {bb}, {cc}.",
 }
 
 

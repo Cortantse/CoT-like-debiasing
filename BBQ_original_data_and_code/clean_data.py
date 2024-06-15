@@ -152,38 +152,24 @@ def check_background_context_counterfactual(context, context_list, masked_contex
             raise Exception(f"contain {item}")
 
 
+import requests
+import json
+
+
+def main():
+    url = "https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=vq2NSZ2p6LI57yM1E6GloT3e&client_secret=EsY6R4TBgReQaIV3PNDelNbXBa0kb7Ts"
+
+    payload = ""
+    headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    response = requests.request("POST", url, headers=headers, data=payload)
+
+    print(response.text)
+
 
 if __name__ == '__main__':
-    import re
-
-    # ss = """```json\n{\n  "differences_between_masked_and_unmasked": {\n    "Person X": "In the unmasked context, (Mohammed) corresponds to (Person X)"\n  },\n  "formatted_differences_between_masked_and_unmasked": {\n    "Person X": "Person X is (Mohammed)."\n  }\n}\n```"""
-    #
-    # ss = pre_process_json(ss)
-    # ss = clean_string(ss)
-    # print(ss)
-    #
-    # ss = json.loads(ss)
-    #
-    # print(ss['formatted_differences_between_masked_and_unmasked'])
-    #
-    # check_background_context_counterfactual(ss, [], 'My girlfriend', ss)
-
-    import json
-
-    import json
-
-
-    def parse_latex_boxed(expression):
-        # 正则表达式匹配形式 boxed{...}
-        match = re.search(r'boxed{([^}]*)}', expression)
-        if match:
-            # 返回匹配到的括号内的内容
-            return match.group(1)
-        else:
-            # 如果没有匹配到，返回 None
-            raise ValueError("No valid options found. Options must be one of [A], [B], [C], or [D].")
-
-    print(parse_latex_boxed('boxed{C}'))
-
-
+    main()
 
